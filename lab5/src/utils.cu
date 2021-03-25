@@ -116,7 +116,7 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
     if (gid >= n*h*c*w){
         shmem[tid] = 0;
     }else{
-        shmem[tid] = -log(pred_Y[gid]) * true_Y[gid];
+        shmem[tid] = -100;
     }
 
     __syncthreads();
