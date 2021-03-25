@@ -739,7 +739,7 @@ void SoftmaxCrossEntropy::backward_pass(float lr)
 
     // TODO (set 5): set grad_in_batch = grad_in_batch - grad_out_batch using
     //               cublasSaxpy
-    CUBLAS_CALL( cubalsSaxpy(cublasHandle, size, &minus_one, grad_out_batch, 1, grad_in_batch, 1) );
+    CUBLAS_CALL( cublasSaxpy(cublasHandle, size, &minus_one, grad_out_batch, 1, grad_in_batch, 1) );
 
     // normalize the gradient by the batch size (do it once in the beginning, so
     // we don't have to worry about it again later)
