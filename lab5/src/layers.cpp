@@ -463,7 +463,7 @@ void Activation::backward_pass(float learning_rate)
     // TODO (set 5): do activation backwards, i.e. compute grad_in_batch
     CUDNN_CALL( cudnnActivationBackward(cudnnHandle, activation_desc,
         &one, in_shape, out_batch, in_shape, grad_out_batch,
-        &zero, in_shape, in_batch, in_shape, grad_in_batch
+        in_shape, in_batch, &zero, in_shape, grad_in_batch
     ) );
 }
 
