@@ -119,6 +119,7 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
         shmem[tid] = -log(pred_Y[gid]) * true_Y[gid];
     }
 
+    __syncthreads();
     // Assumed shared memory to be equal in size to blockDim.x
     for (int s = blockDim.x / 2; s > 0; s <<= 1){
         if (tid < s)
