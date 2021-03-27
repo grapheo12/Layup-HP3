@@ -740,7 +740,7 @@ void SoftmaxCrossEntropy::backward_pass(float lr)
     float minus_one = -1.0;
 
     // TODO (set 5): first, copy grad_in_batch = out_batch
-    CUBLAS_CALL( cublasScopy(cublasHandle, size, out_batch, 1, grad_in_batch, 1) );
+    CUDA_CALL( cudaMemcpy( grad_in_batch, out_batch, size*sizeof(float),  cudaMemcpyDeviceToDevice) );
 
     // TODO (set 5): set grad_in_batch = grad_in_batch - grad_out_batch using
     //               cublasSaxpy
