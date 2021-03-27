@@ -10,7 +10,7 @@
 #include <thrust/device_ptr.h>
 #include <thrust/fill.h>
 #include <algorithm>
-#include <math.h>
+// #include <math.h>
 #include "helper_cuda.h"
 
 // CUDA block width
@@ -113,12 +113,12 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
 
     int tid = threadIdx.x;
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (gid >= n*h*c*w){
-        shmem[tid] = 0;
-    }else{
-        shmem[tid] = -100;
-    }
 
+    shmem[tid] = 0.0f;
+    while (gid < n*c*h*w){
+        shmem[tid] -= log(pred_Y[tid]) * true_Y[tid];
+        gid += gridDim.x * blockDim.x;
+    }
     __syncthreads();
     // Assumed shared memory to be equal in size to blockDim.x
     for (int s = blockDim.x / 2; s > 0; s <<= 1){
