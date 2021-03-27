@@ -367,24 +367,29 @@ void Dense::backward_pass(float learning_rate)
 
     // TODO (set 5): weights = weights + eta * grad_weights
 
-    CUBLAS_CALL( cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
-        in_size, out_size,
-        &one,
-        weights, in_size,
+    // CUBLAS_CALL( cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
+    //     in_size, out_size,
+    //     &one,
+    //     weights, in_size,
+    //     &eta,
+    //     grad_weights, in_size,
+    //     weights, in_size
+    // ) );
+
+    CUBLAS_CALL( cublasSaxpy(cublasHandle,
+        in_size * out_size,
         &eta,
-        grad_weights, in_size,
-        weights, in_size
+        grad_weights, 1,
+        weights, 1
     ) );
 
     // TODO (set 5): biases = biases + eta * grad_biases
 
-    CUBLAS_CALL( cublasSgeam(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
-        out_size, 1,
-        &one,
-        biases, out_size,
+    CUBLAS_CALL( cublasSaxpy(cublasHandle,
+        out_size,
         &eta,
-        grad_biases, out_size,
-        biases, out_size
+        grad_biases, 1,
+        biases, 1
     ) );
 }
 
@@ -446,7 +451,7 @@ void Activation::forward_pass()
     // TODO (set 5): apply activation, i.e. out_batch = activation(in_batch)
     CUDNN_CALL( cudnnActivationForward(cudnnHandle, activation_desc,
         &one, in_shape, in_batch,
-        &zero, in_shape, out_batch
+        &zero, out_shape, out_batch
     ) );
 }
 
@@ -462,7 +467,7 @@ void Activation::backward_pass(float learning_rate)
 
     // TODO (set 5): do activation backwards, i.e. compute grad_in_batch
     CUDNN_CALL( cudnnActivationBackward(cudnnHandle, activation_desc,
-        &one, in_shape, out_batch, in_shape, grad_out_batch,
+        &one, out_shape, out_batch, out_shape, grad_out_batch,
         in_shape, in_batch, &zero, in_shape, grad_in_batch
     ) );
 }
@@ -711,7 +716,7 @@ void SoftmaxCrossEntropy::forward_pass()
     CUDNN_CALL( cudnnSoftmaxForward(cudnnHandle,
         CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_INSTANCE,
         &one, in_shape, in_batch,
-        &zero, in_shape, out_batch
+        &zero, out_shape, out_batch
     ) );
 
 }
