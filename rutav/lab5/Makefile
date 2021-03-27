@@ -1,6 +1,6 @@
 # CS 179 Labs 5-6 Makefile
 # Written by Aadyot Bhatnagar, 2018
-CXXFLAGS += -w
+CXXFLAGS += -w -std=c++14
 
 # Input Names
 CUDA_FILES = utils.cu
