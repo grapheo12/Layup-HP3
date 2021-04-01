@@ -1,6 +1,6 @@
 # CS 179 Labs 5-6 Makefile
 # Written by Aadyot Bhatnagar, 2018
-CXXFLAGS += -w
+CXXFLAGS += -w -std=c++14
 
 # Input Names
 CUDA_FILES = utils.cu
@@ -37,9 +37,7 @@ NVCC_FLAGS += -g -dc -Wno-deprecated-gpu-targets --std=c++11 \
 	      --expt-relaxed-constexpr
 NVCC_INCLUDE =
 NVCC_CUDA_LIBS = 
-NVCC_GENCODES = -gencode arch=compute_30,code=sm_30 \
-		-gencode arch=compute_35,code=sm_35 \
-		-gencode arch=compute_50,code=sm_50 \
+NVCC_GENCODES = -gencode arch=compute_50,code=sm_50 \
 		-gencode arch=compute_52,code=sm_52 \
 		-gencode arch=compute_60,code=sm_60 \
 		-gencode arch=compute_61,code=sm_61
@@ -53,7 +51,7 @@ CUDA_LINK_FLAGS = -dlink -Wno-deprecated-gpu-targets
 
 # C++ Compiler and Flags
 GPP = g++
-FLAGS = -g -Wall -D_REENTRANT -std=c++11 -pthread
+FLAGS = -g -Wall -D_REENTRANT -std=c++11 -pthread -std=c++14
 INCLUDE = -I$(CUDA_INC_PATH)
 CUDA_LIBS = -L$(CUDA_LIB_PATH) -lcudart -lcufft -lcublas -lcudnn -lcurand
 
@@ -115,3 +113,4 @@ clean:
 
 
 .PHONY: clean all
+
