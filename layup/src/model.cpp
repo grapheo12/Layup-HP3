@@ -315,7 +315,6 @@ void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
     std::vector<Layer *>::iterator it;
     for (it = this->layers->begin(); it != this->layers->end(); ++it){
         (*it)->forward_pass();
-        std::cout << "Doing fwd pass" << std::endl;
     }
 
     // Do a backward pass through every layer

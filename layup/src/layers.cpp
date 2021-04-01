@@ -820,6 +820,16 @@ void SoftmaxCrossEntropy::forward_pass()
 				&zero,
 				out_shape, out_batch		
 				) );
+
+    for (int i = 0; i < 10; i++){
+        std::cout << in_batch[i] << " ";
+    }
+    std::cout << "\n";
+
+    for (int i = 0; i < 10; i++){
+        std::cout << out_batch[i] << " ";
+    }
+    std::cout << "\n";
 }
 
 /**
