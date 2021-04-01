@@ -821,15 +821,6 @@ void SoftmaxCrossEntropy::forward_pass()
 				out_shape, out_batch		
 				) );
 
-    for (int i = 0; i < 10; i++){
-        std::cout << in_batch[i] << " ";
-    }
-    std::cout << "\n";
-
-    for (int i = 0; i < 10; i++){
-        std::cout << out_batch[i] << " ";
-    }
-    std::cout << "\n";
 }
 
 /**
@@ -884,6 +875,7 @@ float SoftmaxCrossEntropy::get_loss()
         &nStride, &cStride, &hStride, &wStride) );
 
     loss = CrossEntropyLoss(out_batch, grad_out_batch, n, c, h, w);
+    std::cout << "################ " << loss << std::endl;
     return loss;
 }
 
