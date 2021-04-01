@@ -11,7 +11,8 @@
 #include <thrust/fill.h>
 #include <algorithm>
 #include "helper_cuda.h"
-#include <stdio.h>
+#include "cuPrintf.cuh"
+#include "cuPrintf.cu"
 
 // CUDA block width
 #define BW 1024
@@ -118,7 +119,7 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
         shmem[local_tid] -= log(pred_Y[tid]) * true_Y[tid];
         tid += gridDim.x*blockDim.x; // Only necessary when the number of blocks > 65535
     }
-    printf("%d\n", shmem[local_tid]);
+    cuPrintf("%d\n", shmem[local_tid]);
     __syncthreads();
 
     for (int s = blockDim.x/2; s > 0; s /= 2)
