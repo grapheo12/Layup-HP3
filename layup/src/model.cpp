@@ -9,6 +9,8 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include<iomanip>
+#include<chrono>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -174,6 +176,30 @@ void Model::init_workspace()
  * @param n_epochs The number of iterations over which we want to accumulate
  *                   gradient updates from the entire dataset train_X
  */
+void Model::profile(const float *train_X, float *train_Y, float lr, int n_examples,
+    int n_epochs)
+{
+    int in_size = get_output_batch_size(layers->front());
+    int out_size = get_output_batch_size(layers->back());
+    int n_batches = n_examples / batch_size;
+
+    std:: cout << "Inside Profiler" << std:: endl;
+    for (int i = 0; i < 1; ++i)
+    {
+      
+
+        // Train on every complete batch
+        for (long curr_batch = 0; curr_batch < 1; curr_batch++)
+        {
+            const float *curr_batch_X = train_X + curr_batch * in_size;
+            float *curr_batch_Y = train_Y + curr_batch * out_size;
+            profile_on_batch(curr_batch_X, curr_batch_Y, lr);
+			//printf("Okay Stop after callin train on batch\n");
+	   		//exit(0);	
+        }
+    }
+      std:: cout << "Exiting Profiler" << std:: endl;
+}
 void Model::train(const float *train_X, float *train_Y, float lr, int n_examples,
     int n_epochs)
 {
@@ -303,6 +329,50 @@ result *Model::evaluate(const float *eval_X, float *eval_Y, int n_examples)
  * @param lr The learning rate (coefficient by which we multiply the gradient
  *           when adding it to the current parameter values)
  */
+void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
+{
+    assert(this->has_loss && "Cannot train without a loss function.");
+
+    // Copy input and output minibatches into the model's buffers
+    copy_input_batch(batch_X);
+    copy_output_batch(batch_Y);
+
+    // Do a forward pass through every layer
+    int layer_num = 0;
+    std::vector<Layer *>::iterator it;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
+      auto begin = std::chrono::high_resolution_clock::now();
+      (*it)->forward_pass();
+      auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
+      float time_taken = (float)consumed.count()/1000000.0;
+
+      std:: cout << std::setprecision(15) << std::fixed << std::endl;
+      std::cout << "Layer Number : " << layer_num << std::endl;
+      std:: cout << "Time Taken compute = " << time_taken << std:: endl;
+
+      float *current_output = (*it)->get_output_fwd();
+      float *temp_output = (float *)malloc(sizeof(current_output));
+
+      begin = std::chrono::high_resolution_clock::now();
+      CUDA_CALL( cudaMemcpy(temp_output, current_output,
+        sizeof(current_output), cudaMemcpyDeviceToHost));
+      
+      consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
+      float time_taken_transfer = (float)consumed.count()/1000000.0;
+      
+
+      std::cout << "Layer Number : " << layer_num << std::endl;
+      std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
+
+      float thresh = time_taken_transfer/time_taken;
+
+      std:: cout << "Thresh = " << thresh << "\n";
+      
+    }
+
+        
+}
+
 void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
 {
     assert(this->has_loss && "Cannot train without a loss function.");
@@ -313,9 +383,8 @@ void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
 
     // Do a forward pass through every layer
     std::vector<Layer *>::iterator it;
-    for (it = this->layers->begin(); it != this->layers->end(); ++it){
+    for (it = this->layers->begin(); it != this->layers->end(); ++it)
         (*it)->forward_pass();
-    }
 
     // Do a backward pass through every layer
     std::vector<Layer *>::reverse_iterator rit;
