@@ -434,7 +434,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     cudaDeviceProp prop;
     cudaGetDeviceProp(&prop, 0);
 
-    std::cout << prop.name << " " << prop.bandwidth << std::endl;
+    std::cout << prop.name << " " << prop.memoryBusWidth << std::endl;
 
 
 
