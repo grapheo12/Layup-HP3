@@ -9,6 +9,11 @@
 #include <cudnn.h>
 #include <cublas_v2.h>
 
+
+enum LayupLayer_t {
+    LAYUP_COMPUTE_SENSITIVE,
+    LAYUP_TRANSFER_SENSITIVE
+};
 /**
  * Generic layer superclass. All other layers are subclasses of this one. Pure
  * virtual functions for the forwards and backwards pass must be implmented by
@@ -55,7 +60,7 @@ public:
 
 
     /* Layup Addon */
-    float threshold;
+    LayupLayer_t layer_type;
 
 protected:
     /** Previous layer. */
