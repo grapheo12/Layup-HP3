@@ -363,7 +363,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     double utilRate = 1.0;
     double bandwidth = 732 * 1.0e+9;
 
-    double constfact = 9300 / 732;
+    double constfact = 9300 / 732.0;
 
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
       // auto begin = std::chrono::high_resolution_clock::now();
@@ -385,9 +385,9 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
       // begin = std::chrono::high_resolution_clock::now();
       cudaEventRecord(tran_start,0);
-      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
-        sizeof(current_output), cudaMemcpyDeviceToHost, 0));
-      cudaDeviceSynchronize();
+      CUDA_CALL( cudaMemcpy(temp_output, current_output,
+        sizeof(current_output), cudaMemcpyDeviceToHost));
+    //   cudaDeviceSynchronize();
 
       cudaEventRecord(tran_end,0);	
        cudaEventSynchronize(tran_end);
