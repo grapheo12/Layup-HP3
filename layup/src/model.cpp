@@ -402,6 +402,8 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
       std:: cout << "Thresh = " << thresh << "\n";
       std::cout << (*it)->input_size << std::endl;
+      std::cout << (*it)->flops << std::endl;
+      std::cout << (*it)->input_size / (*it)->flops << std::endl;
       std::cout << "Theoretical thresh = " << ((*it)->input_size / (*it)->flops) * constfact << std::endl;
       threshold += thresh;
       threshvals.push_back(thresh);
