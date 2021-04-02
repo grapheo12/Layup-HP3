@@ -10,6 +10,7 @@
 #include "model.hpp"
 #include "MNISTParser.h"
 
+#define CONV 1
 int main(int argc, char **argv)
 {
     // Kind of activation to use (default relu)
@@ -45,6 +46,7 @@ int main(int argc, char **argv)
     std::cout << "Loaded training set." << std::endl;
 
     // Initialize a model to classify the MNIST dataset
+
     Model *model = new Model(10, c, h, w);
 
 #if VGG
@@ -118,6 +120,9 @@ int main(int argc, char **argv)
 
     // Train the model on the training set for 25 epochs
     std::cout << "Predicting on " << n_classes << " classes." << std::endl;
+    model->profile(train_X, train_Y, 0.03f, n_train, 25);
+    // return 0;
+    model->init_workspace();
     model->train(train_X, train_Y, 0.03f, n_train, 25);
 
     // Load test set
