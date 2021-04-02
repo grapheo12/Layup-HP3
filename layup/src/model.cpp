@@ -337,14 +337,23 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     copy_input_batch(batch_X);
     copy_output_batch(batch_Y);
 
+    cudaEvent_t seq_start, seq_end, tran_start, tran_end;
+	 cudaEventCreate(&seq_start);
+	 cudaEventCreate(&seq_end);
+   cudaEventCreate(&tran_start);
+	 cudaEventCreate(&tran_end);
     // Do a forward pass through every layer
     int layer_num = 0;
     std::vector<Layer *>::iterator it;
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
-      auto begin = std::chrono::high_resolution_clock::now();
+      // auto begin = std::chrono::high_resolution_clock::now();
+       cudaEventRecord(seq_start,0);	
       (*it)->forward_pass();
-      auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
-      float time_taken = (float)consumed.count()/1000000.0;
+       cudaEventRecord(seq_end,0);	
+       cudaEventSynchronize(seq_end);
+      // auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
+      float time_taken =0.0;
+      cudaEventElapsedTime(&time_taken, seq_start, seq_end);
 
       std:: cout << std::setprecision(15) << std::fixed << std::endl;
       std::cout << "Layer Number : " << layer_num << std::endl;
@@ -353,13 +362,15 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float *current_output = (*it)->get_output_fwd();
       float *temp_output = (float *)malloc(sizeof(current_output));
 
-      begin = std::chrono::high_resolution_clock::now();
+      // begin = std::chrono::high_resolution_clock::now();
+      cudaEventRecord(tran_start,0);
       CUDA_CALL( cudaMemcpy(temp_output, current_output,
         sizeof(current_output), cudaMemcpyDeviceToHost));
-      
-      consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
-      float time_taken_transfer = (float)consumed.count()/1000000.0;
-      
+      cudaEventRecord(tran_end,0);	
+       cudaEventSynchronize(tran_end);
+      // consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
+      float time_taken_transfer = 0.0;
+      cudaEventElapsedTime(&time_taken_transfer, tran_start, tran_end);
 
       std::cout << "Layer Number : " << layer_num << std::endl;
       std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
