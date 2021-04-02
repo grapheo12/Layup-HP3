@@ -399,7 +399,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     // 2-means threshold
     threshold /= (float)layer_num;
     std::vector<float> grp1, grp2;
-    float cm1 = 0.0f, cm2 = 1.5f;
+    float cm1 = 0.0f, cm2 = 0.5f;
     for (int i = 0; i < layer_num; i++){
         if (ABS(cm1 - threshvals[i]) < ABS(cm2 - threshvals[i]))
             grp1.push_back(threshvals[i]);
