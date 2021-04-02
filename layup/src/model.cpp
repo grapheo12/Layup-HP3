@@ -369,8 +369,8 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
       // begin = std::chrono::high_resolution_clock::now();
       cudaEventRecord(tran_start,0);
-      CUDA_CALL( cudaMemcpy(temp_output, current_output,
-        sizeof(current_output), cudaMemcpyDeviceToHost));
+      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
+        sizeof(current_output), cudaMemcpyDeviceToHost, 0));
       cudaDeviceSynchronize();
 
       cudaEventRecord(tran_end,0);	
