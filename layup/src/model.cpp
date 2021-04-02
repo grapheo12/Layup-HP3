@@ -397,7 +397,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     // Average threshold
     threshold /= (float)layer_num;
     for (int i = 0; i < layer_num; i++){
-        std::cout << "Layer " << i << " " << threshvals[i] > threshold ? "Transfer Sensitive" : "Compute Sensitive" << std::endl;
+        std::cout << "Layer " << i << " " << ((threshvals[i] > threshold) ? "Transfer Sensitive" : "Compute Sensitive") << std::endl;
     }
 
 
