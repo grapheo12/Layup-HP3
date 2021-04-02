@@ -396,6 +396,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       
     }
 
+    std::cout << "2 means threshold" << std::endl;
     // 2-means threshold
     threshold /= (float)layer_num;
     std::vector<float> grp1, grp2;
@@ -427,6 +428,13 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
             (*it)->layer_type = LAYUP_TRANSFER_SENSITIVE;
         }
     }
+
+
+    std::cout << "Theoretical threshold calculation" << std::endl;
+    cudaDeviceProp prop;
+    cudaGetDeviceProp(&prop, 0);
+
+    std::cout << prop.name << " " << prop.bandwidth << std::endl;
 
 
 
