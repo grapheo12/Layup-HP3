@@ -488,7 +488,7 @@ void Activation::backward_pass(float learning_rate)
  * kernel is (kernel_size x kernel_size), the stride of the convolution is
  * (stride x stride).
  */
-Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
+Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride, int padding
     cublasHandle_t cublasHandle, cudnnHandle_t cudnnHandle)
 : Layer(prev, cublasHandle, cudnnHandle)
 {
@@ -532,7 +532,7 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
     CUDNN_CALL( cudnnCreateConvolutionDescriptor(&conv_desc) );
     CUDNN_CALL( cudnnSetConvolution2dDescriptor(
             conv_desc, 
-            (kernel_size - 1) / 2, (kernel_size - 1) / 2, // Same Padding
+            padding, padding, // Same Padding
             stride, stride, // Stride
             1, 1, // Dilation
             CUDNN_CONVOLUTION, dtype

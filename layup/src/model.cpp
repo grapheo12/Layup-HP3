@@ -104,8 +104,12 @@ void Model::add(std::string layer, std::vector<int> shape)
             "Must specify positive kernel dimension for conv layer.");
         assert(shape[2] > 0 &&
             "Must specify positive stride for conv layer.");
+
+        int padding = (shape[1] - 1) / 2;
+        if (shape.size() == 4)
+            padding = shape[3];
         layers->push_back(
-            new Conv2D(last, shape[0], shape[1], shape[2],
+            new Conv2D(last, shape[0], shape[1], shape[2], padding,
                 cublasHandle, cudnnHandle));
     }
 

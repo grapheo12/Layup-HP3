@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 
 #if VGG
     std::cout << "VGG Model selected" << std::endl;
-    model->add("conv", { 64, 3, 1 });
+    model->add("conv", { 64, 3, 1, 100 });
     model->add("max pool", { 2 });
     model->add("relu");
     model->add("conv", { 64, 3, 1 });
