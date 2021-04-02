@@ -355,6 +355,14 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     float threshold = 0.0f;
     std::vector<float> threshvals;
 
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    std::cout << prop.name << std::endl;
+    float maxFLOPS = 9.3 * 1.0e+12;
+    float utilRate = 1.0f;
+    float bandwidth = 732 * 1.0e+9;
+
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
       // auto begin = std::chrono::high_resolution_clock::now();
        cudaEventRecord(seq_start,0);	
@@ -391,6 +399,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float thresh = time_taken_transfer/time_taken;
 
       std:: cout << "Thresh = " << thresh << "\n";
+      std::cout << "Theoretical thresh = " << ((*it)->input_size / (*it)->flops) * (maxFLOPS * utilRate / bandwidth) << std::endl;
       threshold += thresh;
       threshvals.push_back(thresh);
       
@@ -430,19 +439,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     }
 
 
-    std::cout << "Theoretical threshold calculation" << std::endl;
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0);
-
-    std::cout << prop.name << " " << prop.memoryBusWidth << std::endl;
-
-
-
-
-
-
-
-
+    // std::cout << "Theoretical threshold calculation" << std::endl;
         
 }
 

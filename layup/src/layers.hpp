@@ -61,6 +61,8 @@ public:
 
     /* Layup Addon */
     LayupLayer_t layer_type;
+    float input_size = 0.0f;
+    float flops = 1.0f;
 
 protected:
     /** Previous layer. */
