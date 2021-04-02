@@ -302,7 +302,6 @@ Dense::~Dense()
  */
 void Dense::forward_pass()
 {
-    std::cout << "Dense fwd" << std::endl;
     float one = 1.0, zero = 0.0;
 		
     // TODO (set 5): out_batch = weights^T * in_batch (without biases)
@@ -440,7 +439,6 @@ Activation::~Activation()
  */
 void Activation::forward_pass()
 {
-    std::cout << "Activation fwd" << std::endl;
     float one = 1.0, zero = 0.0;
 	// cout<<"Inside forward pass of Activation layer"<<endl;
 
@@ -595,7 +593,6 @@ size_t Conv2D::get_workspace_size() const
  */
 void Conv2D::forward_pass()
 {
-    std::cout << "Conv2D fwd" << std::endl;
     float zero = 0, one = 1;
 
     // TODO (set 6): Perform convolution forward pass (store in out_batch).
@@ -739,7 +736,6 @@ Pool2D::~Pool2D()
  */
 void Pool2D::forward_pass()
 {
-    std::cout << "Pool2d fwd" << std::endl;
     float zero = 0, one = 1;
     // printf("Starting forward passs in Pool2D\n");
     // TODO (set 6): do pooling in forward direction, store in out_batch
@@ -812,7 +808,6 @@ SoftmaxCrossEntropy::~SoftmaxCrossEntropy() = default;
 
 void SoftmaxCrossEntropy::forward_pass()
 {
-    std::cout << "Softmax fwd" << std::endl;
     float one = 1.0, zero = 0.0;
 
     // TODO (set 5): do softmax forward pass using accurate softmax and
