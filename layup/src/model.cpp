@@ -417,13 +417,13 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
     std::cout << "Centroids: " << cm1 << " " << cm2 << std::endl;
 
-    for (int i = 0; i < layer_num; i++){
+    for (int i = 0, it = this->layers->begin(); i < layer_num; i++, it++){
         if (ABS(cm1 - threshvals[i]) < ABS(cm2 - threshvals[i])){
             std::cout << "Layer " << i << ": Compute Sensitive" << std::endl;
-            this->layers[i]->layer_type = LAYUP_COMPUTE_SENSITIVE;
+            (*it)->layer_type = LAYUP_COMPUTE_SENSITIVE;
         }else{
             std::cout << "Layer " << i << ": Transfer Sensitive" << std::endl;
-            this->layers[i]->layer_type = LAYUP_TRANSFER_SENSITIVE;
+            (*it)->layer_type = LAYUP_TRANSFER_SENSITIVE;
         }
     }
 
