@@ -384,11 +384,19 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float *temp_output = (float *)malloc(sizeof(current_output));
 
       // begin = std::chrono::high_resolution_clock::now();
+
       std::cout << "###################### " << sizeof(current_output) << std::endl;
+      auto out_shape = (*it)->get_out_shape();
+      cudnnDataType_t dtype;
+        int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
+        CUDNN_CALL(cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
+            &n_stride, &c_stride, &h_stride, &w_stride));
+
+        
       cudaEventRecord(tran_start,0);
         //TODO: sizeof(current_output) is wrong
       CUDA_CALL( cudaMemcpy(temp_output, current_output,
-        sizeof(current_output), cudaMemcpyDeviceToHost));
+        n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost));
     //   cudaDeviceSynchronize();
 
       cudaEventRecord(tran_end,0);	
