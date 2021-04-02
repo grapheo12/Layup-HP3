@@ -380,18 +380,16 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       std::cout << "Layer Number : " << layer_num << std::endl;
       std:: cout << "Time Taken compute = " << time_taken << std:: endl;
 
-      float *current_output = (*it)->get_output_fwd();
-      float *temp_output = (float *)malloc(sizeof(current_output));
 
       // begin = std::chrono::high_resolution_clock::now();
-
-      std::cout << "###################### " << sizeof(current_output) << std::endl;
       auto out_shape = (*it)->get_out_shape();
       cudnnDataType_t dtype;
         int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
         CUDNN_CALL(cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
             &n_stride, &c_stride, &h_stride, &w_stride));
 
+      float *current_output = (*it)->get_output_fwd();
+      float *temp_output = (float *)malloc(n*c*h*w*sizeof(float));
         
       cudaEventRecord(tran_start,0);
         //TODO: sizeof(current_output) is wrong
