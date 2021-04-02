@@ -53,6 +53,10 @@ public:
     virtual size_t get_workspace_size() const;
     void set_workspace(float *workspace, size_t workspace_size);
 
+
+    /* Layup Addon */
+    float threshold;
+
 protected:
     /** Previous layer. */
     Layer *prev;
@@ -203,7 +207,7 @@ private:
 class Conv2D : public Layer
 {
 public:
-    Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
+    Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride, int padding,
         cublasHandle_t cublasHandle, cudnnHandle_t cudnnHandle);
     ~Conv2D();
     size_t get_workspace_size() const override;
