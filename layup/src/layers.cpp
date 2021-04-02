@@ -875,7 +875,6 @@ float SoftmaxCrossEntropy::get_loss()
         &nStride, &cStride, &hStride, &wStride) );
 
     loss = CrossEntropyLoss(out_batch, grad_out_batch, n, c, h, w);
-    std::cout << "################ " << loss << std::endl;
     return loss;
 }
 
