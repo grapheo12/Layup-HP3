@@ -89,6 +89,7 @@ int main(int argc, char **argv)
     model->add("dense", { n_classes });
     
     model->add("softmax crossentropy");
+    model->init_workspace();
     
 
 #else
