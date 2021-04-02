@@ -121,7 +121,7 @@ int main(int argc, char **argv)
     // Train the model on the training set for 25 epochs
     std::cout << "Predicting on " << n_classes << " classes." << std::endl;
     model->profile(train_X, train_Y, 0.03f, n_train, 25);
-    // return 0;
+    return 0;
     model->init_workspace();
     model->train(train_X, train_Y, 0.03f, n_train, 25);
 
