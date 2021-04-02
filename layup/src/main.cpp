@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     std::cout << "Loaded training set." << std::endl;
 
     // Initialize a model to classify the MNIST dataset
-    Model *model = new Model(200, c, h, w);
+    Model *model = new Model(10, c, h, w);
 
 #if VGG
     std::cout << "VGG Model selected" << std::endl;
