@@ -20,6 +20,8 @@
 #include "model.hpp"
 #include "helper_cuda.h"
 
+#define ABS(x) (((x) >= 0) ? (x) : -(x))
+
 /**
  * Initializes a neural network that does a forwards and backwards pass on
  * minibatches of data. In each minibatch, there are n data points, each with
@@ -394,11 +396,28 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       
     }
 
-    // Average threshold
+    // 2-means threshold
     threshold /= (float)layer_num;
+    std::vector<float> grp1, grp2;
+    float cm1 = 0.0f, cm2 = 2.5f;
     for (int i = 0; i < layer_num; i++){
-        std::cout << "Layer " << i << " " << ((threshvals[i] > threshold) ? "Transfer Sensitive" : "Compute Sensitive") << std::endl;
+        if (ABS(cm1 - threshvals[i]) < ABS(cm2 - threshvals[i]))
+            grp1.push_back(threshvals[i]);
+        else
+            grp2.push_back(threshvals[i]);
     }
+    cm1 = 0.0f;
+    for (float x : grp1)
+        cm1 += x;
+    cm1 /= (float)grp1.size();
+    cm2 = 0.0f;
+    for (float x : grp2)
+        cm2 += x;
+    cm2 /= (float)grp2.size();
+
+    std::cout << "Centroids: " << cm1 << " " << cm2 << std::endl;
+
+    
 
 
         
