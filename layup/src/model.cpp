@@ -363,6 +363,8 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     double utilRate = 1.0;
     double bandwidth = 732 * 1.0e+9;
 
+    double constfact = 9300 / 732;
+
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
       // auto begin = std::chrono::high_resolution_clock::now();
        cudaEventRecord(seq_start,0);	
@@ -399,7 +401,8 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float thresh = time_taken_transfer/time_taken;
 
       std:: cout << "Thresh = " << thresh << "\n";
-      std::cout << "Theoretical thresh = " << ((*it)->input_size / (*it)->flops) * (maxFLOPS * utilRate / bandwidth) << std::endl;
+      std::cout << (*it)->input_size << std::endl;
+      std::cout << "Theoretical thresh = " << ((*it)->input_size / (*it)->flops) * constfact << std::endl;
       threshold += thresh;
       threshvals.push_back(thresh);
       
