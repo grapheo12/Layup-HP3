@@ -1,97 +1,510 @@
 /**
- * Builds and trains a neural network on the MNIST dataset of handwritten digits
+ * Layer-agnostic implementation of a neural network Model's core functionality
  * @author Aadyot Bhatnagar
  * @date April 22, 2018
  */
 
 #include <string>
-#include <cstring>
+#include <cassert>
 #include <iostream>
+#include <vector>
+#include <algorithm>
+#include<iomanip>
+#include<chrono>
+
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include <cudnn.h>
+
+#include "layers.hpp"
 #include "model.hpp"
-#include "MNISTParser.h"
+#include "helper_cuda.h"
 
-#define CONV 1
-int main(int argc, char **argv)
+/**
+ * Initializes a neural network that does a forwards and backwards pass on
+ * minibatches of data. In each minibatch, there are n data points, each with
+ * c channels, height h, and width w. For one-dimensional input data, set height
+ * and width to 1, and let the number of channels c represent the dimensionality
+ * of the input vectors.
+ */
+Model::Model(int n, int c, int h, int w) {
+    this->has_loss = false;
+    this->batch_size = n;
+    this->input_size = c * h * w;
+    CUBLAS_CALL( cublasCreate(&cublasHandle) );
+    CUDNN_CALL( cudnnCreate(&cudnnHandle) );
+    this->layers = new std::vector<Layer *>;
+    this->layers->push_back(new Input(n, c, h, w, cublasHandle, cudnnHandle));
+    printf("Model init done.\n");
+}
+
+Model::~Model() {
+    std::vector<Layer *>::iterator it;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it)
+        delete *it;
+    delete this->layers;
+    if (workspace)
+        CUDA_CALL( cudaFree(workspace) );
+    CUBLAS_CALL( cublasDestroy(cublasHandle) );
+    CUDNN_CALL( cudnnDestroy(cudnnHandle) );
+}
+
+/**
+ * To add a layer to a model, one must specify the type of layer as a string, as
+ * well as the arguments needed to instantiate such a layer. The arguments arg1,
+ * arg2, and arg3 specify the parameters used in the constructor of the layer we
+ * wish to initialize. They have default values of 0, and a user need only supply
+ * the arguments necessary taken by the constructor for the desired layer.
+ *
+ * @param layer A name for the kind of layer we want to add to the model.
+ * @param shape Parameters used to initialize the layer in question.
+ */
+void Model::add(std::string layer, std::vector<int> shape)
 {
-    // Kind of activation to use (default relu)
-    std::string activation = "relu";
+    assert(!this->has_loss && "Cannot add any layers after a loss function.");
 
-    // Directory in which training and testing data are stored (default is this)
-    std::string dirname = "../../data";
+    Layer *last = layers->back();
+    std::transform(layer.begin(), layer.end(), layer.begin(), ::tolower);
 
-    // Parse command line arguments
-    for (int i = 1; i < argc; ++i)
+    /* ReLU activation */
+    if (layer == "relu")
     {
-        if (strcmp(argv[i], "--dir") == 0 || strcmp(argv[i], "-d") == 0)
-        {
-            i++;
-            if (i < argc)
-                dirname = argv[i];
-        }
-
-        else if (strcmp(argv[i], "--act") == 0 || strcmp(argv[i], "-a") == 0)
-        {
-            i++;
-            if (i < argc)
-                activation = argv[i];
-        }
+        layers->push_back(
+            new Activation(last, CUDNN_ACTIVATION_RELU, 0.0,
+                cublasHandle, cudnnHandle));
     }
 
-    // Load training set
-    int n_train, c, h, w, n_classes;
-    float *train_X, *train_Y;
-    LoadMNISTData(dirname + "/train-images.idx3-ubyte",
-        dirname + "/train-labels.idx1-ubyte",
-        n_train, c, h, w, n_classes, &train_X, &train_Y);
-    std::cout << "Loaded training set." << std::endl;
+    /* tanh activation */
+    else if (layer == "tanh")
+    {
+        layers->push_back(
+            new Activation(last, CUDNN_ACTIVATION_TANH, 0.0,
+                cublasHandle, cudnnHandle));
+    }
 
-    // Initialize a model to classify the MNIST dataset
-    Model *model = new Model(20000, c, h, w);
-#if CONV
-    model->add("conv", { 20, 5, 1 });
-    model->add("max pool", { 2 });
-    model->add(activation);
-    model->add("conv", { 5, 3, 1 });
-    model->add("max pool", { 2 });
-#else
-    printf("Before adding dense layer\n");
-    model->add("dense", { 200 });
-    printf("After adding dense layer\n");
-#endif
-    printf("Before adding activation layer\n");
-    model->add(activation);
-    printf("After adding activation layer\n");
-    model->add("dense", { n_classes });
-    printf("After adding dense layer 2\n");
-    model->add("softmax crossentropy");
-    printf("After adding Cross entropy layer layer\n");
-    model->init_workspace();
+    /* Loss layers must also update that the model has a loss function */
+    else if (layer == "softmax crossentropy" || layer == "softmax cross-entropy")
+    {
+        layers->push_back(new SoftmaxCrossEntropy(last, cublasHandle, cudnnHandle));
+        this->has_loss = true;
+    }
 
-    // Train the model on the training set for 25 epochs
-    std::cout << "Predicting on " << n_classes << " classes." << std::endl;
-    model->profile(train_X, train_Y, 0.03f, n_train, 25);
-    return 0;
-    model->train(train_X, train_Y, 0.03f, n_train, 25);
+    /* Dense layer */
+    else if (layer == "dense")
+    {
+        assert(!shape.empty() && shape[0] > 0 &&
+            "Must specify positive output shape for dense layer.");
+        layers->push_back(new Dense(last, shape[0], cublasHandle, cudnnHandle));
+    }
 
-    // Load test set
-    int n_test;
-    float *test_X, *test_Y;
-    LoadMNISTData(dirname + "/test-images.idx3-ubyte",
-        dirname + "/test-labels.idx1-ubyte",
-        n_test, c, h, w, n_classes, &test_X, &test_Y);
-    std::cout << "Loaded test set." << std::endl;
+    /* Convolutional layer */
+    else if (layer == "conv")
+    {
+        assert(shape[0] > 0 &&
+            "Must specify positive number of knernels for conv layer.");
+        assert(shape[1] > 0 &&
+            "Must specify positive kernel dimension for conv layer.");
+        assert(shape[2] > 0 &&
+            "Must specify positive stride for conv layer.");
+        layers->push_back(
+            new Conv2D(last, shape[0], shape[1], shape[2],
+                cublasHandle, cudnnHandle));
+    }
 
-    // Evaluate model on the test set
-    result *res = model->evaluate(test_X, test_Y, n_test);
+    /* Max pooling layer */
+    else if (layer == "max pool")
+    {
+        assert(!shape.empty() && shape[0] > 0 &&
+            "Must specify positive pooling dimension.");
+        layers->push_back(
+            new Pool2D(last, shape[0], CUDNN_POOLING_MAX,
+                cublasHandle, cudnnHandle) );
+    }
 
-    // Delete all dynamically allocated data
-    delete[] res->predictions;
-    delete res;
-    delete model;
-    delete[] train_X;
-    delete[] train_Y;
-    delete[] test_X;
-    delete[] test_Y;
+    else if (layer == "avg pool" || layer == "average pool" ||
+        layer == "mean pool")
+    {
+        assert(!shape.empty() && shape[0] > 0 &&
+            "Must specify positive pooling dimension.");
+        layers->push_back(
+            new Pool2D(last, shape[0],
+                CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING,
+                cublasHandle, cudnnHandle) );
+    }
 
-    return 0;
+
+    else assert(false && "Invalid layer specification.");
+}
+
+/**
+ * Sets up any cuDNN workspace to be used by this model.
+ *
+ * @pre The layers of this model have all been added
+ */
+void Model::init_workspace()
+{
+    assert(this->has_loss && "All layers of model must have been added!");
+
+    // Get the largest workspace needed by any layer
+    std::vector<Layer *>::iterator it;
+    for (it = layers->begin(); it != layers->end(); ++it)
+        workspace_size = std::max(workspace_size, (*it)->get_workspace_size());
+
+    // If any need a nonzero-sized workspace, initialize one appropriately
+    // and give it to each layer individually
+    if (workspace_size > 0)
+    {
+        CUDA_CALL( cudaMalloc(&workspace, workspace_size) );
+        for (it = layers->begin(); it != layers->end(); ++it)
+            (*it)->set_workspace(workspace, workspace_size);
+    }
+}
+
+/**
+ * Trains the model on the training examples given at the specified learning
+ * rate for the desired number of epochs.
+ *
+ * @param train_X The entire dataset that we wish to train our model on
+ *
+ * @param train_Y The ground truth labels assigned to each entry in train_X
+ *
+ * @param lr The learning rate (the coefficient to multipy the gradient by when
+ *             doing gradient descent)
+ *
+ * @param n_examples The number of training examples contained in train_X
+ *
+ * @param n_epochs The number of iterations over which we want to accumulate
+ *                   gradient updates from the entire dataset train_X
+ */
+void Model::profile(const float *train_X, float *train_Y, float lr, int n_examples,
+    int n_epochs)
+{
+    int in_size = get_output_batch_size(layers->front());
+    int out_size = get_output_batch_size(layers->back());
+    int n_batches = n_examples / batch_size;
+
+    std:: cout << "Inside Profiler" << std:: endl;
+    for (int i = 0; i < 1; ++i)
+    {
+      
+
+        // Train on every complete batch
+        for (long curr_batch = 0; curr_batch < 1; curr_batch++)
+        {
+            const float *curr_batch_X = train_X + curr_batch * in_size;
+            float *curr_batch_Y = train_Y + curr_batch * out_size;
+            profile_on_batch(curr_batch_X, curr_batch_Y, lr);
+			//printf("Okay Stop after callin train on batch\n");
+	   		//exit(0);	
+        }
+    }
+      std:: cout << "Exiting Profiler" << std:: endl;
+}
+void Model::train(const float *train_X, float *train_Y, float lr, int n_examples,
+    int n_epochs)
+{
+    int in_size = get_output_batch_size(layers->front());
+    int out_size = get_output_batch_size(layers->back());
+    int n_batches = n_examples / batch_size;
+
+    for (int i = 0; i < n_epochs; ++i)
+    {
+        std::cout << "Epoch " << i + 1 << std::endl;
+        std::cout << "--------------------------------------------------------------";
+        std::cout << std::endl;
+
+        float acc = 0;
+        float loss = 0;
+
+        // Train on every complete batch
+        for (long curr_batch = 0; curr_batch < n_batches; curr_batch++)
+        {
+            const float *curr_batch_X = train_X + curr_batch * in_size;
+            float *curr_batch_Y = train_Y + curr_batch * out_size;
+            train_on_batch(curr_batch_X, curr_batch_Y, lr);
+			//printf("Okay Stop after callin train on batch\n");
+	   		//exit(0);	
+
+            // Update training statistics for this minibatch
+            acc += this->layers->back()->get_accuracy();
+            loss += this->layers->back()->get_loss();
+        }
+
+        std::cout << "Loss: " << loss / n_batches;
+        std::cout << ",\tAccuracy: " << (100 * acc / n_batches);
+        std::cout << std::endl << std::endl;
+    }
+}
+
+
+/**
+ * Has a trained model return its predictions on a set of data.
+ *
+ * @param pred_X A set of data points that we want our model to make
+ *                 predictions on
+ *
+ * @param n_examples The number of data points in pred_X
+ *
+ * @return An array of the model's predictions on each data point in pred_X
+ */
+float *Model::predict(const float *pred_X, int n_examples)
+{
+    // variables in which to get input and output shape
+    int in_size = get_output_batch_size(layers->front());
+    int out_size = get_output_batch_size(layers->back());
+
+    /* Allocate array for predictions */
+    float *pred_Y = new float[out_size * n_examples / batch_size];
+
+    /* Predict on every complete batch */
+    int n_batches = n_examples / batch_size;
+    for (int curr_batch = 0; curr_batch < n_batches; ++curr_batch) {
+        float *curr = predict_on_batch(pred_X + curr_batch * in_size);
+        CUDA_CALL( cudaMemcpy(pred_Y + curr_batch * out_size, curr,
+            out_size * sizeof(float), cudaMemcpyDeviceToHost) );
+    }
+
+    return pred_Y;
+}
+
+
+/**
+ * Returns the model's predictive performance on a set of inputs, given their
+ * ground truth labels.
+ *
+ * @param eval_X A set of data points we want to evaluate a trained model's
+ *               predictive performance
+ *
+ * @param eval_Y The ground truth labels for each data point in eval_X
+ *
+ * @param n_examples The number of data points in eval_X
+ *
+ * @return The model's average predictive performance on data (eval_X, eval_Y)
+ */
+result *Model::evaluate(const float *eval_X, float *eval_Y, int n_examples)
+{
+    int in_size = get_output_batch_size(layers->front());
+    int out_size = get_output_batch_size(layers->back());
+    int n_batches = n_examples / batch_size;
+
+    // Allocate array for predictions
+    result *ret = new result;
+    ret->predictions = new float[out_size * n_batches];
+    ret->acc = 0;
+    ret->loss = 0;
+
+    // Predict on every complete batch
+    for (int curr_batch = 0; curr_batch < n_batches; ++curr_batch) {
+        const float *curr_batch_X = eval_X + curr_batch * in_size;
+        float *curr_batch_Y = eval_Y + curr_batch * out_size;
+        result *curr = evaluate_on_batch(curr_batch_X, curr_batch_Y);
+
+        // Copy results from batch into accumulator for full sample
+        CUDA_CALL( cudaMemcpy(ret->predictions + curr_batch * out_size,
+            curr->predictions, out_size * sizeof(float), cudaMemcpyDeviceToHost) );
+        ret->acc = (ret->acc * curr_batch + curr->acc) / (curr_batch + 1u);
+        ret->loss = (ret->loss * curr_batch + curr->loss) / (curr_batch + 1u);
+        delete curr;
+    }
+
+    std::cout << "Validation" << std::endl;
+    std::cout << "----------------------------------------------------";
+    std::cout << std::endl << "Loss: " << ret->loss;
+    std::cout << ",\tAccuracy: " << ret->acc << std::endl << std::endl;
+    return ret;
+}
+
+
+
+/**
+ * Does one stochastic gradient update on the model using a minibatch of input
+ * data batch_X with corresponding ground truth labels batch_Y.
+ *
+ * @param batch_X The starting point of the minibatch of data we wish to use to
+ *                  perform the next stochastic gradient descent update
+ *
+ * @param batch_Y The starting point of the minibatch of ground truth labels
+ *                  associated with batch_X
+ *
+ * @param lr The learning rate (coefficient by which we multiply the gradient
+ *           when adding it to the current parameter values)
+ */
+void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
+{
+    assert(this->has_loss && "Cannot train without a loss function.");
+
+    // Copy input and output minibatches into the model's buffers
+    copy_input_batch(batch_X);
+    copy_output_batch(batch_Y);
+
+    cudaEvent_t seq_start, seq_end, tran_start, tran_end;
+	 cudaEventCreate(&seq_start);
+	 cudaEventCreate(&seq_end);
+   cudaEventCreate(&tran_start);
+	 cudaEventCreate(&tran_end);
+    // Do a forward pass through every layer
+    int layer_num = 0;
+    std::vector<Layer *>::iterator it;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
+      // auto begin = std::chrono::high_resolution_clock::now();
+       cudaEventRecord(seq_start,0);	
+      (*it)->forward_pass();
+       cudaEventRecord(seq_end,0);	
+       cudaEventSynchronize(seq_end);
+      // auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
+      float time_taken =0.0;
+      cudaEventElapsedTime(&time_taken, seq_start, seq_end);
+
+      std:: cout << std::setprecision(15) << std::fixed << std::endl;
+      std::cout << "Layer Number : " << layer_num << std::endl;
+      std:: cout << "Time Taken compute = " << time_taken << std:: endl;
+
+      float *current_output = (*it)->get_output_fwd();
+      float *temp_output = (float *)malloc(sizeof(current_output));
+
+      // begin = std::chrono::high_resolution_clock::now();
+      cudaEventRecord(tran_start,0);
+      CUDA_CALL( cudaMemcpy(temp_output, current_output,
+        sizeof(current_output), cudaMemcpyDeviceToHost));
+      cudaEventRecord(tran_end,0);	
+       cudaEventSynchronize(tran_end);
+      // consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
+      float time_taken_transfer = 0.0;
+      cudaEventElapsedTime(&time_taken_transfer, tran_start, tran_end);
+
+      std::cout << "Layer Number : " << layer_num << std::endl;
+      std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
+
+      float thresh = time_taken_transfer/time_taken;
+
+      std:: cout << "Thresh = " << thresh << "\n";
+      
+    }
+
+        
+}
+
+void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
+{
+    assert(this->has_loss && "Cannot train without a loss function.");
+
+    // Copy input and output minibatches into the model's buffers
+    copy_input_batch(batch_X);
+    copy_output_batch(batch_Y);
+
+    // Do a forward pass through every layer
+    std::vector<Layer *>::iterator it;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it)
+        (*it)->forward_pass();
+
+    // Do a backward pass through every layer
+    std::vector<Layer *>::reverse_iterator rit;
+    for (rit = this->layers->rbegin(); rit != this->layers->rend(); ++rit)
+        (*rit)->backward_pass(lr);
+}
+
+
+/**
+ * Returns the model's predictions on a minibatch of input data starting at
+ * batch_X.
+ *
+ * @param batch_X A minibatch of input data we want our model to make
+ *                  predictions on
+ *
+ * @return The model's predictions on batch_X
+ */
+float *Model::predict_on_batch(const float *batch_X) {
+
+    // Copy input (batch_X) into input layer and nothing into output layer
+    copy_input_batch(batch_X);
+
+    // Do a forward pass through every layer
+    std::vector<Layer*>::iterator it;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it)
+        (*it)->forward_pass();
+
+    // The predictions are the output of the last layer
+    return this->layers->back()->get_output_fwd();
+}
+
+
+/**
+ * Evalutes the model's predictions on an input minibatch batch_X with
+ * true outputs batch_Y.
+ *
+ * @param batch_X A minibatch of data we want to use to evaluate our trained
+ *                  model's performance
+ *
+ * @param batch_Y The starting point of the minibatch of ground truth labels
+ *                  associated with batch_X
+ *
+ * @return The model's average predictive performance on data minibatch
+ *           (batch_X, batch_Y)
+ */
+result *Model::evaluate_on_batch(const float *batch_X, float *batch_Y) {
+    assert(this->has_loss && "Cannot evaluate without a loss function.");
+
+    // Making predictions does a forward pass
+    result *ret = new result;
+    ret->predictions = predict_on_batch(batch_X);
+
+    // Copy the output batch to the loss layer so we can evaluate our
+    // predictions (since we've already done a forward pass)
+    copy_output_batch(batch_Y);
+    ret->acc = this->layers->back()->get_accuracy();
+    ret->loss = this->layers->back()->get_loss();
+    return ret;
+}
+
+/**
+ * Copies a minibatch of inputs on the host to the device buffer corresponding
+ * to the outputs of the input layer.
+ *
+ * @param batch_X    A pointer to the start of the host buffer containing the
+ *                    minibatch of inputs we wish to copy. The size (in bytes) of
+ *                    the minibatch is inferred from the input layer.
+ */
+void Model::copy_input_batch(const float *batch_X)
+{
+    Layer *input = layers->front();
+    int in_size = get_output_batch_size(input);
+    CUDA_CALL( cudaMemcpyAsync(input->get_output_fwd(), batch_X,
+        in_size * sizeof(float), cudaMemcpyHostToDevice) );
+}
+
+/**
+ * Copies a minibatch of outputs on the host to the device buffer corresponding
+ * to the gradient with respect to the output of the loss layer.
+ *
+ * @param batch_Y    A pointer to the start of the host buffer containing the
+ *                    minibatch of outputs we wish to copy. The size (in bytes) of
+ *                    the minibatch is inferred from the loss layer.
+ */
+void Model::copy_output_batch(const float *batch_Y)
+{
+    Layer *loss = layers->back();
+    int out_size = get_output_batch_size(loss);
+    CUDA_CALL( cudaMemcpyAsync(loss->get_input_bwd(), batch_Y,
+        out_size * sizeof(float), cudaMemcpyHostToDevice) );
+}
+
+/**
+ * Returns the number of floats in an output minibatch of the given layer.
+ *
+ * @param layer    The layer whose output size we wish to find
+ *
+ * @return The size (in number of floats) of the output of {@code layer}
+ */
+int Model::get_output_batch_size(Layer *layer) const
+{
+    // variables in which to get output shape
+    cudnnDataType_t dtype;
+    int n, c, h, w, nStride, cStride, hStride, wStride;
+
+    // Figure out size of output minibatch
+    cudnnTensorDescriptor_t out_shape = layer->get_out_shape();
+    CUDNN_CALL( cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
+        &nStride, &cStride, &hStride, &wStride) );
+
+    return n * c * h * w;
 }
