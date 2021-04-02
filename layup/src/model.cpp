@@ -432,7 +432,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
     std::cout << "Theoretical threshold calculation" << std::endl;
     cudaDeviceProp prop;
-    cudaGetDeviceProp(&prop, 0);
+    cudaGetDeviceProperties(&prop, 0);
 
     std::cout << prop.name << " " << prop.memoryBusWidth << std::endl;
 
