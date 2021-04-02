@@ -532,7 +532,7 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
     CUDNN_CALL( cudnnCreateConvolutionDescriptor(&conv_desc) );
     CUDNN_CALL( cudnnSetConvolution2dDescriptor(
             conv_desc, 
-            0, 0, // Padding
+            (kernel_size - 1) / 2, (kernel_size - 1) / 2, // Same Padding
             stride, stride, // Stride
             1, 1, // Dilation
             CUDNN_CONVOLUTION, dtype
