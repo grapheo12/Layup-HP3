@@ -354,6 +354,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
        cudaEventRecord(seq_start,0);	
       (*it)->forward_pass();
        cudaEventRecord(seq_end,0);	
+       cudaDeviceSynchronize();
        cudaEventSynchronize(seq_end);
       // auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
       float time_taken =0.0;
