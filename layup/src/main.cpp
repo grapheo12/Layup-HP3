@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 
 #if VGG
     std::cout << "VGG Model selected" << std::endl;
-    model->add("conv", { 20, 5, 1 });
+    model->add("conv", { 64, 3, 1 });
     model->add("max pool", { 2 });
     model->add("relu");
     model->add("conv", { 64, 3, 1 });
@@ -60,31 +60,31 @@ int main(int argc, char **argv)
     model->add("conv", { 128, 3, 1 });
     model->add("relu");
     model->add("max pool", { 2 });
-    // model->add("conv", { 256, 3, 1 });
-    // model->add("relu");
-    // model->add("conv", { 256, 3, 1 });
-    // model->add("relu");
-    // model->add("conv", { 256, 3, 1 });
-    // model->add("relu");
-    // model->add("max pool", { 2 });
-    // model->add("conv", { 512, 3, 1 });
-    // model->add("relu");
-    // model->add("conv", { 512, 3, 1 });
-    // model->add("relu");
-    // model->add("conv", { 512, 3, 1 });
-    // model->add("relu");
-    // model->add("max pool", { 2 });
-    // model->add("conv", { 512, 3, 1 });
-    // model->add("relu");
-    // model->add("conv", { 512, 3, 1 });
-    // model->add("relu");
-    // model->add("conv", { 512, 3, 1 });
-    // model->add("relu");
-    // model->add("max pool", { 2 });
-
-    model->add("dense", { 1024 });
+    model->add("conv", { 256, 3, 1 });
     model->add("relu");
-    model->add("dense", { 1024 });
+    model->add("conv", { 256, 3, 1 });
+    model->add("relu");
+    model->add("conv", { 256, 3, 1 });
+    model->add("relu");
+    model->add("max pool", { 2 });
+    model->add("conv", { 512, 3, 1 });
+    model->add("relu");
+    model->add("conv", { 512, 3, 1 });
+    model->add("relu");
+    model->add("conv", { 512, 3, 1 });
+    model->add("relu");
+    model->add("max pool", { 2 });
+    model->add("conv", { 512, 3, 1 });
+    model->add("relu");
+    model->add("conv", { 512, 3, 1 });
+    model->add("relu");
+    model->add("conv", { 512, 3, 1 });
+    model->add("relu");
+    model->add("max pool", { 2 });
+
+    model->add("dense", { 4096 });
+    model->add("relu");
+    model->add("dense", { 4096 });
     model->add("relu");
     model->add("dense", { n_classes });
     
