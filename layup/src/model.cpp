@@ -359,9 +359,9 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     cudaGetDeviceProperties(&prop, 0);
 
     std::cout << prop.name << std::endl;
-    float maxFLOPS = 9.3 * 1.0e+12;
-    float utilRate = 1.0f;
-    float bandwidth = 732 * 1.0e+9;
+    double maxFLOPS = 9.3 * 1.0e+12;
+    double utilRate = 1.0;
+    double bandwidth = 732 * 1.0e+9;
 
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
       // auto begin = std::chrono::high_resolution_clock::now();
