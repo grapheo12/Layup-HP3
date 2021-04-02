@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 
     // Initialize a model to classify the MNIST dataset
 
-    Model *model = new Model(195, c, h, w);
+    Model *model = new Model(190, c, h, w);
 
 #if VGG
     std::cout << "VGG Model selected" << std::endl;
