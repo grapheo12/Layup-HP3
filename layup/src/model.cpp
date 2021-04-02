@@ -384,7 +384,9 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float *temp_output = (float *)malloc(sizeof(current_output));
 
       // begin = std::chrono::high_resolution_clock::now();
+      std::cout << "###################### " << sizeof(current_output) << std::endl;
       cudaEventRecord(tran_start,0);
+        //TODO: sizeof(current_output) is wrong
       CUDA_CALL( cudaMemcpy(temp_output, current_output,
         sizeof(current_output), cudaMemcpyDeviceToHost));
     //   cudaDeviceSynchronize();
