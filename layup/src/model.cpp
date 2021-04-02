@@ -390,7 +390,7 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
       std:: cout << "Thresh = " << thresh << "\n";
       threshold += thresh;
-      threshvals.append(thresh);
+      threshvals.push_back(thresh);
       
     }
 
