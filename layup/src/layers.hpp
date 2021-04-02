@@ -53,6 +53,10 @@ public:
     virtual size_t get_workspace_size() const;
     void set_workspace(float *workspace, size_t workspace_size);
 
+
+    /* Layup Addon */
+    float threshold;
+
 protected:
     /** Previous layer. */
     Layer *prev;
