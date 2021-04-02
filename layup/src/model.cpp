@@ -393,9 +393,9 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
         
       cudaEventRecord(tran_start,0);
         //TODO: sizeof(current_output) is wrong
-      CUDA_CALL( cudaMemcpy(temp_output, current_output,
-        n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost));
-    //   cudaDeviceSynchronize();
+      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
+        n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost, 0));
+      cudaDeviceSynchronize();
 
       cudaEventRecord(tran_end,0);	
        cudaEventSynchronize(tran_end);
