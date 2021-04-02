@@ -349,6 +349,10 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     // Do a forward pass through every layer
     int layer_num = 0;
     std::vector<Layer *>::iterator it;
+
+    float threshold = 0.0f;
+    std::vector<float> threshvals;
+
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
       // auto begin = std::chrono::high_resolution_clock::now();
        cudaEventRecord(seq_start,0);	
@@ -385,8 +389,17 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float thresh = time_taken_transfer/time_taken;
 
       std:: cout << "Thresh = " << thresh << "\n";
+      threshold += thresh;
+      threshvals.append(thresh);
       
     }
+
+    // Average threshold
+    threshold /= (float)layer_num;
+    for (int i = 0; i < layer_num; i++){
+        std::cout << "Layer " << i << " " << threshvals[i] > threshold ? "Transfer Sensitive" : "Compute Sensitive" << std::endl;
+    }
+
 
         
 }
