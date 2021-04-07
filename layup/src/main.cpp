@@ -19,6 +19,7 @@ int main(int argc, char **argv)
     // Directory in which training and testing data are stored (default is this)
     std::string dirname = "../../data";
 
+    int batchsize = 16;
     // Parse command line arguments
     for (int i = 1; i < argc; ++i)
     {
@@ -35,6 +36,13 @@ int main(int argc, char **argv)
             if (i < argc)
                 activation = argv[i];
         }
+
+        else if (strcmp(argv[i], "--batch") == 0)
+        {
+            i++;
+            if (i < argc)
+                batchsize = atoi(argv[i]);
+        }
     }
 
     // Load training set
@@ -47,12 +55,11 @@ int main(int argc, char **argv)
 
     // Initialize a model to classify the MNIST dataset
 
-    Model *model = new Model(10, c, h, w);
+    Model *model = new Model(batchsize, c, h, w);
 
 #if VGG
     std::cout << "VGG Model selected" << std::endl;
     model->add("conv", { 64, 3, 1, 100 });
-    model->add("max pool", { 2 });
     model->add("relu");
     model->add("conv", { 64, 3, 1 });
     model->add("relu");
@@ -121,7 +128,7 @@ int main(int argc, char **argv)
     // Train the model on the training set for 25 epochs
     std::cout << "Predicting on " << n_classes << " classes." << std::endl;
     model->profile(train_X, train_Y, 0.03f, n_train, 25);
-    // return 0;
+    return 0;
     model->init_workspace();
     model->train(train_X, train_Y, 0.03f, n_train, 25);
 

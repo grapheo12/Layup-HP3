@@ -20,6 +20,8 @@
 #include "model.hpp"
 #include "helper_cuda.h"
 
+#define ABS(x) (((x) >= 0) ? (x) : -(x))
+
 /**
  * Initializes a neural network that does a forwards and backwards pass on
  * minibatches of data. In each minibatch, there are n data points, each with
@@ -349,10 +351,25 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
     // Do a forward pass through every layer
     int layer_num = 0;
     std::vector<Layer *>::iterator it;
+
+    float threshold = 0.0f;
+    std::vector<float> threshvals;
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    std::cout << prop.name << std::endl;
+    double maxFLOPS = 9.3 * 1.0e+12;
+    double utilRate = 1.0;
+    double bandwidth = 732 * 1.0e+9;
+
+    double constfact = 9300 / 732.0;
+
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
       // auto begin = std::chrono::high_resolution_clock::now();
        cudaEventRecord(seq_start,0);	
       (*it)->forward_pass();
+       cudaDeviceSynchronize();
        cudaEventRecord(seq_end,0);	
        cudaEventSynchronize(seq_end);
       // auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
@@ -363,13 +380,23 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       std::cout << "Layer Number : " << layer_num << std::endl;
       std:: cout << "Time Taken compute = " << time_taken << std:: endl;
 
-      float *current_output = (*it)->get_output_fwd();
-      float *temp_output = (float *)malloc(sizeof(current_output));
 
       // begin = std::chrono::high_resolution_clock::now();
+      auto out_shape = (*it)->get_out_shape();
+      cudnnDataType_t dtype;
+        int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
+        CUDNN_CALL(cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
+            &n_stride, &c_stride, &h_stride, &w_stride));
+
+      float *current_output = (*it)->get_output_fwd();
+      float *temp_output = (float *)malloc(n*c*h*w*sizeof(float));
+        
       cudaEventRecord(tran_start,0);
-      CUDA_CALL( cudaMemcpy(temp_output, current_output,
-        sizeof(current_output), cudaMemcpyDeviceToHost));
+        //TODO: sizeof(current_output) is wrong
+      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
+        n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost, 0));
+      cudaDeviceSynchronize();
+
       cudaEventRecord(tran_end,0);	
        cudaEventSynchronize(tran_end);
       // consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
@@ -382,9 +409,50 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
       float thresh = time_taken_transfer/time_taken;
 
       std:: cout << "Thresh = " << thresh << "\n";
+      std::cout << (*it)->input_size << std::endl;
+      std::cout << (*it)->flops << std::endl;
+      std::cout << (*it)->input_size / (*it)->flops << std::endl;
+      std::cout << "Theoretical thresh = " << ((*it)->input_size / (*it)->flops) * constfact << std::endl;
+      threshold += thresh;
+      threshvals.push_back(thresh);
       
     }
 
+    std::cout << "2 means threshold" << std::endl;
+    // 2-means threshold
+    threshold /= (float)layer_num;
+    std::vector<float> grp1, grp2;
+    float cm1 = 0.0f, cm2 = 0.5f;
+    for (int i = 0; i < layer_num; i++){
+        if (ABS(cm1 - threshvals[i]) < ABS(cm2 - threshvals[i]))
+            grp1.push_back(threshvals[i]);
+        else
+            grp2.push_back(threshvals[i]);
+    }
+    cm1 = 0.0f;
+    for (float x : grp1)
+        cm1 += x;
+    cm1 /= (float)grp1.size();
+    cm2 = 0.0f;
+    for (float x : grp2)
+        cm2 += x;
+    cm2 /= (float)grp2.size();
+
+    std::cout << "Centroids: " << cm1 << " " << cm2 << std::endl;
+
+    it = this->layers->begin();
+    for (int i = 0; i < layer_num; i++, it++){
+        if (ABS(cm1 - threshvals[i]) < ABS(cm2 - threshvals[i])){
+            std::cout << "Layer " << i << ": Compute Sensitive" << std::endl;
+            (*it)->layer_type = LAYUP_COMPUTE_SENSITIVE;
+        }else{
+            std::cout << "Layer " << i << ": Transfer Sensitive" << std::endl;
+            (*it)->layer_type = LAYUP_TRANSFER_SENSITIVE;
+        }
+    }
+
+
+    // std::cout << "Theoretical threshold calculation" << std::endl;
         
 }
 

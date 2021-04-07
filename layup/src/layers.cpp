@@ -557,7 +557,12 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride, int padd
     // Allocate all relevant buffers and initialize filters and biases
     allocate_buffers();
     init_weights_biases();
+
+
+    flops = (2 * kernel_size * kernel_size) * (h * w) * (n * n_kernels);
+    input_size = n * c * h * w * sizeof(float);
 }
+
 
 Conv2D::~Conv2D()
 {
