@@ -40,12 +40,19 @@ public:
 
     float *predict(const float *pred_X, int num_examples);
     result *evaluate(const float *eval_X, float *eval_Y, int num_examples);
+    
+    /* Shows the indices of the checkpoint layers */
+    std::vector<int> checkpoints;
 
+    /* Stores the pointers to access feature maps in CPU*/
+    std::vector<float*> cpu_memory;
 private:
     void profile_on_batch(const float *batch_X, float *batch_Y, float lr);
     void train_on_batch(const float *batch_X, float *batch_Y, float lr);
     float *predict_on_batch(const float *batch_X);
     result *evaluate_on_batch(const float *batch_X, float *batch_Y);
+    
+    
 
     void copy_input_batch(const float *batch_X);
     void copy_output_batch(const float *batch_Y);
