@@ -20,6 +20,8 @@
 #include "model.hpp"
 #include "helper_cuda.h"
 
+#define ABS(x) (((x) >= 0) ? (x) : -(x))
+
 /**
  * Initializes a neural network that does a forwards and backwards pass on
  * minibatches of data. In each minibatch, there are n data points, each with
@@ -346,47 +348,78 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 	 cudaEventCreate(&seq_end);
    cudaEventCreate(&tran_start);
 	 cudaEventCreate(&tran_end);
+
+   double cumulative = 0.0;
     // Do a forward pass through every layer
     int layer_num = 0;
     std::vector<Layer *>::iterator it;
+
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    std::cout << prop.name << std::endl;
+    double maxFLOPS = 9.3 * 1.0e+12;
+    double utilRate = 1.0;
+    double bandwidth = 732 * 1.0e+9;
+
+    double constfact = 9300 / 732.0;
+
     for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
-      // auto begin = std::chrono::high_resolution_clock::now();
-       cudaEventRecord(seq_start,0);	
+      auto out_shape = (*it)->get_out_shape();
+      cudnnDataType_t dtype;
+        int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
+        CUDNN_CALL(cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
+            &n_stride, &c_stride, &h_stride, &w_stride));
+
+      float *t_output;
+
+      CUDA_CALL(cudaEventRecord(seq_start,0));
+      CUDA_CALL(cudaMalloc((float**)&t_output,n*c*h*w*sizeof(float)));	
       (*it)->forward_pass();
+       cudaDeviceSynchronize();
        cudaEventRecord(seq_end,0);	
        cudaEventSynchronize(seq_end);
-      // auto consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
-      float time_taken =0.0;
-      cudaEventElapsedTime(&time_taken, seq_start, seq_end);
-
+      float time_taken_compute = 0.0;
+      cudaEventElapsedTime(&time_taken_compute, seq_start, seq_end);
+      CUDA_CALL(cudaFree(t_output));
+      cumulative += time_taken_compute;
       std:: cout << std::setprecision(15) << std::fixed << std::endl;
       std::cout << "Layer Number : " << layer_num << std::endl;
-      std:: cout << "Time Taken compute = " << time_taken << std:: endl;
+      std:: cout << "Time Taken compute = " << time_taken_compute << std:: endl;
+      std:: cout << "Time Taken compute cumulative = " << cumulative << std:: endl;
 
       float *current_output = (*it)->get_output_fwd();
-      float *temp_output = (float *)malloc(sizeof(current_output));
-
-      // begin = std::chrono::high_resolution_clock::now();
+      float *temp_output = (float *)malloc(n*c*h*w*sizeof(float));
+        
       cudaEventRecord(tran_start,0);
-      CUDA_CALL( cudaMemcpy(temp_output, current_output,
-        sizeof(current_output), cudaMemcpyDeviceToHost));
+      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
+        n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost, 0));
+      cudaDeviceSynchronize();
+
       cudaEventRecord(tran_end,0);	
        cudaEventSynchronize(tran_end);
-      // consumed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now()-begin);
-      float time_taken_transfer = 0.0;
+       float time_taken_transfer = 0.0;
       cudaEventElapsedTime(&time_taken_transfer, tran_start, tran_end);
 
       std::cout << "Layer Number : " << layer_num << std::endl;
       std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
 
-      float thresh = time_taken_transfer/time_taken;
-
+      float thresh = time_taken_transfer/time_taken_compute;
+      float thresh_cumulative = time_taken_transfer/cumulative;
       std:: cout << "Thresh = " << thresh << "\n";
+      std:: cout << "Cumulative Thresh = " << thresh_cumulative << "\n";
+
+      if(thresh_cumulative < 1.0 || layer_num==0){
+        (this)->checkpoints.push_back(layer_num);
+        (this)->cpu_memory.push_back(temp_output);
+        cumulative = 0.0;
+        std::cout<<"CHECKPOINT AT LAYER "<<layer_num<<std::endl;
+      }
       
     }
-
-        
 }
+
 
 void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
 {
