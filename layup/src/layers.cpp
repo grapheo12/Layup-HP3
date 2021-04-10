@@ -116,6 +116,11 @@ float *Layer::get_output_fwd() const
     return out_batch;
 }
 
+float *Layer::get_input_fwd() const
+{
+    return in_batch;
+}
+
 /**
  * Returns the input from the next layer to be passed back during the backward
  * pass. This will be used by the next layer's constructor to initialize its
@@ -222,21 +227,42 @@ void Layer::freeUnnecessary()
         in_batch = NULL;
         grad_in_batch = NULL;
     }
-    CUDA_CALL(cudaFree(out_batch));
-    CUDA_CALL(cudaFree(grad_out_batch));
+    if(out_batch)
+    {
+        CUDA_CALL(cudaFree(out_batch));
+        out_batch = NULL;
+    }
+    if(grad_out_batch)
+    {
+        CUDA_CALL(cudaFree(grad_out_batch));
+        grad_out_batch = NULL;
+    }
 }
 
 void Layer::allocateOutput()
 {
     if (prev)
     {
-        in_batch = prev->get_output_fwd(); // in_batch = prev->out_batch
+        in_batch = prev->out_batch; // in_batch = prev->out_batch
         if(prev->prev && (prev->prev->is_ckpt == 0))
+        {
             CUDA_CALL( cudaFree(prev->in_batch) );
+            prev->in_batch = NULL;
+            prev->prev->out_batch = NULL;
+        }
+    }
+    CUDA_CALL( cudaMalloc(&out_batch, output_size * sizeof(float)) );
+
+}
+
+void Layer::allocateOutputBackward()
+{
+    if (prev)
+    {
+        in_batch = prev->out_batch; // in_batch = prev->out_batch
     }
     CUDA_CALL( cudaMalloc(&out_batch, output_size * sizeof(float)) );
 }
-
 
 void Layer::transferOutputToHost(cudaStream_t transfer_stream)
 {
@@ -244,14 +270,38 @@ void Layer::transferOutputToHost(cudaStream_t transfer_stream)
     CUDA_CALL( cudaMemcpyAsync(( h_out_batchPinned ), ( out_batch ), output_size * sizeof(float), cudaMemcpyDeviceToHost, transfer_stream) );
 }
 
+void Layer::transferOutputToDevice(cudaStream_t transfer_stream)
+{
+    CUDA_CALL( cudaMalloc( &out_batch, (output_size)*sizeof(float) ) );
+    CUDA_CALL( cudaMemcpyAsync(( out_batch ), ( h_out_batchPinned ), output_size * sizeof(float), cudaMemcpyHostToDevice, transfer_stream) );
+}
+
+
 void Layer::freeOutputMem()
 {
     CUDA_CALL( cudaFree(out_batch) );
+    out_batch = NULL;
 }
 
 void Layer::allocate_grad_out_batch()
 {
     CUDA_CALL( cudaMalloc(&grad_out_batch, output_size*sizeof(float)) );
+}
+
+void Layer::allocate_grad_in_batch()
+{
+    CUDA_CALL( cudaMalloc(&grad_in_batch, input_size*sizeof(float)) );
+}
+
+void Layer::allocateGradients()
+{
+    allocate_grad_in_batch();
+    prev->grad_out_batch = grad_in_batch;
+}
+
+void Layer::setInputPrevOutput()
+{
+    in_batch = prev->out_batch;
 }
 
 /******************************************************************************/

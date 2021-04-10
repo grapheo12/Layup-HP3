@@ -45,6 +45,7 @@ public:
 
     /* Valid getters for all layers */
     float *get_output_fwd() const;
+    float *get_input_fwd() const;
     float *get_input_bwd() const;
     cudnnTensorDescriptor_t get_in_shape() const;
     cudnnTensorDescriptor_t get_out_shape() const;
@@ -60,9 +61,14 @@ public:
     void freeUnnecessary();
     int input_size, output_size, is_ckpt = 0;
     void allocateOutput();
+    void allocateOutputBackward();
     void transferOutputToHost(cudaStream_t transfer_stream);
+    void transferOutputToDevice(cudaStream_t transfer_stream);
     void freeOutputMem();
     void allocate_grad_out_batch();
+    void allocate_grad_in_batch();
+    void allocateGradients();
+    void setInputPrevOutput();
     float *h_out_batchPinned = NULL;
 
 protected:

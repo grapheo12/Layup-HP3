@@ -235,14 +235,9 @@ void Model::train(const float *train_X, float *train_Y, float lr, int n_examples
         {
             const float *curr_batch_X = train_X + curr_batch * in_size;
             float *curr_batch_Y = train_Y + curr_batch * out_size;
-            // train_on_batch(curr_batch_X, curr_batch_Y, lr); // Commmenting this -- original behvaviour. This will break due to freeing of memory. 
+            // train_on_batch(curr_batch_X, curr_batch_Y, lr); // Commmenting this -- original behvaviour. This will break due to freeing of memory.
             train_on_batch_forward(curr_batch_X, curr_batch_Y, lr); 
-			//printf("Okay Stop after callin train on batch\n");
-	   		//exit(0);	
-
-            // Update training statistics for this minibatch
-            acc += this->layers->back()->get_accuracy();
-            loss += this->layers->back()->get_loss();
+            train_on_batch_backward(curr_batch_X, curr_batch_Y, lr, &acc, &loss); 
         }
 
         std::cout << "Loss: " << loss / n_batches;
@@ -485,6 +480,10 @@ void Model::train_on_batch_forward(const float *batch_X, float *batch_Y, float l
         // printf("Layer start %d\n", layer_num);
 
         (*it)->allocateOutput(); // Simply allocate output buffer and free prev input (except if prev->prev is ckpt).
+        /*if(layer_num != 0)
+        {
+            printf("Layer : %d; Out batch : %d, In batch : %d, Prev out batch : %d \n", layer_num, (*it)->get_output_fwd(), (*it)->get_input_fwd(), (*it)->get_prev()->get_output_fwd());
+        }*/
         if( (*it)->is_ckpt )
         {
             // printf("checkpoints number : %d\n", checkpoint_num);
@@ -493,6 +492,7 @@ void Model::train_on_batch_forward(const float *batch_X, float *batch_Y, float l
             if(checkpoint_num > 1)
             {
                 ckpt_pointers[checkpoint_num - 2]->freeOutputMem();
+                (*layers)[checkpoints[checkpoint_num - 2] + 1]->setInputPrevOutput();
             }  
             if(checkpoint_num != 0)
             {
@@ -501,6 +501,10 @@ void Model::train_on_batch_forward(const float *batch_X, float *batch_Y, float l
             checkpoint_num++;
             // (*it)->copyInputToHost(transfer_stream);
         }
+        /*if(layer_num != 0)
+        {
+            printf("Layer : %d; Out batch : %d, In batch : %d, Prev out batch : %d \n", layer_num, (*it)->get_output_fwd(), (*it)->get_input_fwd(), (*it)->get_prev()->get_output_fwd());
+        }*/
 
         if(it == this->layers->begin())
         {
@@ -513,24 +517,107 @@ void Model::train_on_batch_forward(const float *batch_X, float *batch_Y, float l
             copy_output_batch(batch_Y);
             CUDA_CALL( cudaDeviceSynchronize() );
         }
+        /*if(layer_num != 0)
+        {
+            printf("Layer : %d; Out batch : %d, In batch : %d, Prev out batch : %d \n", layer_num, (*it)->get_output_fwd(), (*it)->get_input_fwd(), (*it)->get_prev()->get_output_fwd());
+        }*/
 
         (*it)->forward_pass();
         CUDA_CALL( cudaStreamSynchronize(compute_stream) );
         // printf("Layer done %d\n", layer_num);
+        /*if(layer_num != 0)
+        {
+            printf("Layer : %d; Out batch : %d, In batch : %d, Prev out batch : %d \n", layer_num, (*it)->get_output_fwd(), (*it)->get_input_fwd(), (*it)->get_prev()->get_output_fwd());
+        }*/
         layer_num++;
     }
 
-    for(it = this->layers->begin(); it != this->layers->end(); ++it) // DUMMMYYYYYYY PLEASE REMOVE DURING BACKWARD.
-    {
-        if((*it)->is_ckpt)
-        {
-            CUDA_CALL( cudaFreeHost((*it)->h_out_batchPinned) );
-        }
-    }
+    CUDA_CALL( cudaStreamSynchronize(transfer_stream) );
+    CUDA_CALL( cudaStreamSynchronize(compute_stream) );
+    // ckpt_pointers[ckpt_pointers.size() - 2]->freeOutputMem();
+
+    // int temp = 0;
+    // for (it = this->layers->begin(); it != this->layers->end(); ++it)
+    // {
+    //     // printf("Layer : %d; Out batch : %d, In batch : %d \n", temp, (*it)->get_output_fwd(), (*it)->get_input_fwd());
+    //     temp++;
+    // }
+    // for(it = this->layers->begin(); it != this->layers->end(); ++it) // DUMMMYYYYYYY PLEASE REMOVE DURING BACKWARD.
+    // {
+    //     if((*it)->is_ckpt)
+    //     {
+    //         CUDA_CALL( cudaFreeHost((*it)->h_out_batchPinned) );
+    //     }
+    // }
     // Do a backward pass through every layer
     // std::vector<Layer *>::reverse_iterator rit;
     // for (rit = this->layers->rbegin(); rit != this->layers->rend(); ++rit)
         // (*rit)->backward_pass(lr);
+}
+
+void Model::train_on_batch_backward(const float *batch_X, float *batch_Y, float lr, float *acc, float *loss)
+{
+    std::vector<Layer *>::iterator rit;
+    int ckpt_index = ckpt_pointers.size() - 1;
+    int curr_ckpt = checkpoints[ckpt_index];
+    int next_ckpt = (*layers).size() - 1;
+    for(rit = this->layers->end() - 1; ; --rit)
+    {
+        // printf("Current ckpt %d; Next ckpt : %d\n", curr_ckpt, next_ckpt);
+        // printf("Out batch : %d, In batch : %d \n", (*rit)->get_output_fwd(), (*rit)->get_input_fwd());
+
+        if( (ckpt_index >= 1) && ( !ckpt_pointers[ckpt_index - 1]->get_output_fwd() ) )
+        {
+            ckpt_pointers[ckpt_index - 1]->transferOutputToDevice(transfer_stream);
+            (*layers)[checkpoints[ckpt_index - 1] + 1]->setInputPrevOutput();
+            // CUDA_CALL( cudaStreamSynchronize(transfer_stream) ); // Remove this
+        }
+
+        for(int j = curr_ckpt + 1; j < next_ckpt; j++)
+        {
+            if(j != next_ckpt) // Change this.
+            {
+                (*this->layers)[j]->allocateOutputBackward(); // in_batch = prev->out_batch, allocate memory for out_batch.
+                (*layers)[j+1]->setInputPrevOutput();
+            }
+            // printf("Forward %d. Out batch : %d, In batch : %d; Prev out batch : %d \n", j, (*this->layers)[j]->get_output_fwd(), (*this->layers)[j]->get_input_fwd(), (*this->layers)[j]->get_prev()->get_output_fwd());
+            (*this->layers)[j]->forward_pass();
+            // printf("Forward pass\n");
+        }
+
+        for(int k = next_ckpt; k > curr_ckpt; k--)
+        {
+            // printf("backward %d. Out batch : %d, In batch : %d; Prev out batch : %d \n", k, (*this->layers)[k]->get_output_fwd(), (*this->layers)[k]->get_input_fwd(), (*this->layers)[k]->get_prev()->get_output_fwd());
+            (*this->layers)[k]->allocateGradients(); // allocate mem to grad_out_batch and prev->grad_in_batch = grad_out_batch
+            (*this->layers)[k]->backward_pass(lr);
+        }
+        // printf("Current ckpt %d; Next ckpt : %d. Done.\n", curr_ckpt, next_ckpt);
+        CUDA_CALL( cudaStreamSynchronize(transfer_stream) );
+        CUDA_CALL( cudaStreamSynchronize(compute_stream) );
+
+        if(next_ckpt == (*layers).size() - 1 && (curr_ckpt != next_ckpt))
+        {
+            (*acc) += this->layers->back()->get_accuracy();
+            (*loss) += this->layers->back()->get_loss();
+        }
+
+        for(int j = curr_ckpt + 1; j <= next_ckpt; j++)
+        {
+            (*this->layers)[j]->freeUnnecessary();
+            if(j == next_ckpt)
+                CUDA_CALL( cudaFreeHost(((*this->layers)[next_ckpt])->h_out_batchPinned) );
+        }
+
+        next_ckpt = curr_ckpt;
+        ckpt_index--;
+        curr_ckpt = checkpoints[ckpt_index];
+
+
+        if(rit == this->layers->begin() || next_ckpt == 0)
+            break;
+    }
+
+    (*layers)[0]->freeUnnecessary();
 }
 
 
