@@ -9,6 +9,8 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include<iomanip>
+#include<chrono>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -17,6 +19,8 @@
 #include "layers.hpp"
 #include "model.hpp"
 #include "helper_cuda.h"
+
+#define ABS(x) (((x) >= 0) ? (x) : -(x))
 
 /**
  * Initializes a neural network that does a forwards and backwards pass on
@@ -31,6 +35,14 @@ Model::Model(int n, int c, int h, int w) {
     this->input_size = c * h * w;
     CUBLAS_CALL( cublasCreate(&cublasHandle) );
     CUDNN_CALL( cudnnCreate(&cudnnHandle) );
+
+
+    CUDA_CALL( cudaStreamCreate(&compute_stream) );
+    CUDA_CALL( cudaStreamCreate(&transfer_stream) );
+
+    CUBLAS_CALL( cublasSetStream(cublasHandle, compute_stream) );
+    CUDNN_CALL( cudnnSetStream(cudnnHandle, compute_stream) );
+
     this->layers = new std::vector<Layer *>;
     this->layers->push_back(new Input(n, c, h, w, cublasHandle, cudnnHandle));
     printf("Model init done.\n");
@@ -104,8 +116,12 @@ void Model::add(std::string layer, std::vector<int> shape)
             "Must specify positive kernel dimension for conv layer.");
         assert(shape[2] > 0 &&
             "Must specify positive stride for conv layer.");
+
+        int padding = (shape[1] - 1) / 2;
+        if (shape.size() == 4)
+            padding = shape[3];
         layers->push_back(
-            new Conv2D(last, shape[0], shape[1], shape[2],
+            new Conv2D(last, shape[0], shape[1], shape[2], padding,
                 cublasHandle, cudnnHandle));
     }
 
@@ -174,6 +190,30 @@ void Model::init_workspace()
  * @param n_epochs The number of iterations over which we want to accumulate
  *                   gradient updates from the entire dataset train_X
  */
+void Model::profile(const float *train_X, float *train_Y, float lr, int n_examples,
+    int n_epochs)
+{
+    int in_size = get_output_batch_size(layers->front());
+    int out_size = get_output_batch_size(layers->back());
+    int n_batches = n_examples / batch_size;
+
+    std:: cout << "Inside Profiler" << std:: endl;
+    for (int i = 0; i < 1; ++i)
+    {
+      
+
+        // Train on every complete batch
+        for (long curr_batch = 0; curr_batch < 1; curr_batch++)
+        {
+            const float *curr_batch_X = train_X + curr_batch * in_size;
+            float *curr_batch_Y = train_Y + curr_batch * out_size;
+            profile_on_batch(curr_batch_X, curr_batch_Y, lr);
+			//printf("Okay Stop after callin train on batch\n");
+	   		//exit(0);	
+        }
+    }
+      std:: cout << "Exiting Profiler" << std:: endl;
+}
 void Model::train(const float *train_X, float *train_Y, float lr, int n_examples,
     int n_epochs)
 {
@@ -195,7 +235,8 @@ void Model::train(const float *train_X, float *train_Y, float lr, int n_examples
         {
             const float *curr_batch_X = train_X + curr_batch * in_size;
             float *curr_batch_Y = train_Y + curr_batch * out_size;
-            train_on_batch(curr_batch_X, curr_batch_Y, lr);
+            // train_on_batch(curr_batch_X, curr_batch_Y, lr); // Commmenting this -- original behvaviour. This will break due to freeing of memory. 
+            train_on_batch_forward(curr_batch_X, curr_batch_Y, lr); 
 			//printf("Okay Stop after callin train on batch\n");
 	   		//exit(0);	
 
@@ -303,6 +344,114 @@ result *Model::evaluate(const float *eval_X, float *eval_Y, int n_examples)
  * @param lr The learning rate (coefficient by which we multiply the gradient
  *           when adding it to the current parameter values)
  */
+void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
+{
+    assert(this->has_loss && "Cannot train without a loss function.");
+
+    // Copy input and output minibatches into the model's buffers
+    copy_input_batch(batch_X);
+    copy_output_batch(batch_Y);
+
+    cudaEvent_t seq_start, seq_end, tran_start, tran_end;
+    cudaEventCreate(&seq_start);
+    cudaEventCreate(&seq_end);
+    cudaEventCreate(&tran_start);
+    cudaEventCreate(&tran_end);
+
+    double cumulative = 0.0;
+    // Do a forward pass through every layer
+    int layer_num = 0;
+    std::vector<Layer *>::iterator it;
+
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    std::cout << prop.name << std::endl;
+    double maxFLOPS = 9.3 * 1.0e+12;
+    double utilRate = 1.0;
+    double bandwidth = 732 * 1.0e+9;
+
+    double constfact = 9300 / 732.0;
+
+    for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
+      auto out_shape = (*it)->get_out_shape();
+      cudnnDataType_t dtype;
+        int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
+        CUDNN_CALL(cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
+            &n_stride, &c_stride, &h_stride, &w_stride));
+
+      float *t_output;
+
+      CUDA_CALL(cudaEventRecord(seq_start,0));
+      CUDA_CALL(cudaMalloc((float**)&t_output,n*c*h*w*sizeof(float)));	
+      (*it)->forward_pass();
+       cudaDeviceSynchronize();
+       cudaEventRecord(seq_end,0);	
+       cudaEventSynchronize(seq_end);
+      float time_taken_compute = 0.0;
+      cudaEventElapsedTime(&time_taken_compute, seq_start, seq_end);
+      CUDA_CALL(cudaFree(t_output));
+      cumulative += time_taken_compute;
+      std:: cout << std::setprecision(15) << std::fixed << std::endl;
+      std::cout << "Layer Number : " << layer_num << std::endl;
+      std:: cout << "Time Taken compute = " << time_taken_compute << std:: endl;
+      std:: cout << "Time Taken compute cumulative = " << cumulative << std:: endl;
+
+      float *current_output = (*it)->get_output_fwd();
+      float *temp_output = (float *)malloc(n*c*h*w*sizeof(float));
+      
+      (*it)->output_size = n*c*h*w; // Storing output size
+      if((*it)->get_prev())
+      {
+        (*it)->input_size = (*it)->get_prev()->output_size;
+        printf("Input Size : %d\n", (*it)->input_size);
+      }
+      printf("Ouput Size : %d\n", (*it)->output_size);
+      
+      cudaEventRecord(tran_start,0);
+      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
+        n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost, 0));
+      cudaDeviceSynchronize();
+
+      cudaEventRecord(tran_end,0);	
+       cudaEventSynchronize(tran_end);
+       float time_taken_transfer = 0.0;
+      cudaEventElapsedTime(&time_taken_transfer, tran_start, tran_end);
+
+      std::cout << "Layer Number : " << layer_num << std::endl;
+      std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
+
+      float thresh = time_taken_transfer/time_taken_compute;
+      float thresh_cumulative = time_taken_transfer/cumulative;
+      std:: cout << "Thresh = " << thresh << "\n";
+      std:: cout << "Cumulative Thresh = " << thresh_cumulative << "\n";
+      free(temp_output);
+      if(thresh_cumulative < 1.0 || layer_num==0)
+      {
+        (this)->checkpoints.push_back(layer_num);
+        this->ckpt_pointers.push_back((*it));
+        // (this)->cpu_memory.push_back(temp_output);
+        cumulative = 0.0;
+        (*it)->is_ckpt = 1;
+        std::cout<<"CHECKPOINT AT LAYER "<<layer_num<<std::endl;
+      }
+      
+    }
+}
+
+void Model::cudaFreeUnnecessary()
+{
+    // printf("Inside freeing mem.\n");
+    std::vector<Layer *>::iterator it;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it)
+    {
+        (*it)->freeUnnecessary();
+    }
+    printf("Freed all input and output memory.\n");
+}
+
+
 void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
 {
     assert(this->has_loss && "Cannot train without a loss function.");
@@ -320,6 +469,68 @@ void Model::train_on_batch(const float *batch_X, float *batch_Y, float lr)
     std::vector<Layer *>::reverse_iterator rit;
     for (rit = this->layers->rbegin(); rit != this->layers->rend(); ++rit)
         (*rit)->backward_pass(lr);
+}
+
+void Model::train_on_batch_forward(const float *batch_X, float *batch_Y, float lr)
+{
+    assert(this->has_loss && "Cannot train without a loss function.");
+
+    // Copy input and output minibatches into the model's buffers
+
+    // Do a forward pass through every layer
+    std::vector<Layer *>::iterator it;
+    int checkpoint_num = 0, layer_num = 0;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it)
+    {
+        // printf("Layer start %d\n", layer_num);
+
+        (*it)->allocateOutput(); // Simply allocate output buffer and free prev input (except if prev->prev is ckpt).
+        if( (*it)->is_ckpt )
+        {
+            // printf("checkpoints number : %d\n", checkpoint_num);
+            // if(layer_num != checkpoints[0])
+            CUDA_CALL( cudaStreamSynchronize(transfer_stream) );
+            if(checkpoint_num > 1)
+            {
+                ckpt_pointers[checkpoint_num - 2]->freeOutputMem();
+            }  
+            if(checkpoint_num != 0)
+            {
+                ckpt_pointers[checkpoint_num - 1]->transferOutputToHost(transfer_stream);
+            }
+            checkpoint_num++;
+            // (*it)->copyInputToHost(transfer_stream);
+        }
+
+        if(it == this->layers->begin())
+        {
+            copy_input_batch(batch_X);
+            CUDA_CALL( cudaDeviceSynchronize() );
+        }
+        if((*it) == this->layers->back())
+        {
+            (*it)->allocate_grad_out_batch();
+            copy_output_batch(batch_Y);
+            CUDA_CALL( cudaDeviceSynchronize() );
+        }
+
+        (*it)->forward_pass();
+        CUDA_CALL( cudaStreamSynchronize(compute_stream) );
+        // printf("Layer done %d\n", layer_num);
+        layer_num++;
+    }
+
+    for(it = this->layers->begin(); it != this->layers->end(); ++it) // DUMMMYYYYYYY PLEASE REMOVE DURING BACKWARD.
+    {
+        if((*it)->is_ckpt)
+        {
+            CUDA_CALL( cudaFreeHost((*it)->h_out_batchPinned) );
+        }
+    }
+    // Do a backward pass through every layer
+    // std::vector<Layer *>::reverse_iterator rit;
+    // for (rit = this->layers->rbegin(); rit != this->layers->rend(); ++rit)
+        // (*rit)->backward_pass(lr);
 }
 
 

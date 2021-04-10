@@ -215,6 +215,44 @@ void Layer::init_weights_biases()
     CURAND_CALL( curandDestroyGenerator(gen) );
 }
 
+void Layer::freeUnnecessary()
+{
+    if (prev)
+    {
+        in_batch = NULL;
+        grad_in_batch = NULL;
+    }
+    CUDA_CALL(cudaFree(out_batch));
+    CUDA_CALL(cudaFree(grad_out_batch));
+}
+
+void Layer::allocateOutput()
+{
+    if (prev)
+    {
+        in_batch = prev->get_output_fwd(); // in_batch = prev->out_batch
+        if(prev->prev && (prev->prev->is_ckpt == 0))
+            CUDA_CALL( cudaFree(prev->in_batch) );
+    }
+    CUDA_CALL( cudaMalloc(&out_batch, output_size * sizeof(float)) );
+}
+
+
+void Layer::transferOutputToHost(cudaStream_t transfer_stream)
+{
+    CUDA_CALL( cudaMallocHost((void**) &( h_out_batchPinned ), output_size * sizeof(float) ) );
+    CUDA_CALL( cudaMemcpyAsync(( h_out_batchPinned ), ( out_batch ), output_size * sizeof(float), cudaMemcpyDeviceToHost, transfer_stream) );
+}
+
+void Layer::freeOutputMem()
+{
+    CUDA_CALL( cudaFree(out_batch) );
+}
+
+void Layer::allocate_grad_out_batch()
+{
+    CUDA_CALL( cudaMalloc(&grad_out_batch, output_size*sizeof(float)) );
+}
 
 /******************************************************************************/
 /*                        INPUT LAYER IMPLEMENTATION                          */
@@ -486,7 +524,7 @@ void Activation::backward_pass(float learning_rate)
  * kernel is (kernel_size x kernel_size), the stride of the convolution is
  * (stride x stride).
  */
-Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
+Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride, int padding,
     cublasHandle_t cublasHandle, cudnnHandle_t cudnnHandle)
 : Layer(prev, cublasHandle, cudnnHandle)
 {
@@ -530,7 +568,7 @@ Conv2D::Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
     CUDNN_CALL( cudnnCreateConvolutionDescriptor(&conv_desc) );
     CUDNN_CALL( cudnnSetConvolution2dDescriptor(
             conv_desc, 
-            0, 0, // Padding
+            padding, padding, // Same Padding
             stride, stride, // Stride
             1, 1, // Dilation
             CUDNN_CONVOLUTION, dtype
@@ -820,6 +858,7 @@ void SoftmaxCrossEntropy::forward_pass()
 				&zero,
 				out_shape, out_batch		
 				) );
+
 }
 
 /**

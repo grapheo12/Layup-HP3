@@ -51,7 +51,7 @@ CUDA_LINK_FLAGS = -dlink -Wno-deprecated-gpu-targets
 
 # C++ Compiler and Flags
 GPP = g++
-FLAGS = -g -Wall -D_REENTRANT -std=c++11 -pthread -std=c++14
+FLAGS = -g -Wall -D_REENTRANT -std=c++14 -pthread
 INCLUDE = -I$(CUDA_INC_PATH)
 CUDA_LIBS = -L$(CUDA_LIB_PATH) -lcudart -lcufft -lcublas -lcudnn -lcurand
 
@@ -68,6 +68,7 @@ CUDA_OBJ_FILES = $(addprefix $(OBJDIR)/, $(addsuffix .o, $(CUDA_FILES)))
 CPP_OBJ = $(addprefix $(OBJDIR)/, $(addsuffix .o, $(CPP_FILES)))
 CONV_OBJ = $(addprefix $(OBJDIR)/conv-, $(addsuffix .o, $(CPP_MAIN)))
 DENSE_OBJ = $(addprefix $(OBJDIR)/dense-, $(addsuffix .o, $(CPP_MAIN)))
+VGG_OBJ = $(addprefix $(OBJDIR)/vgg-, $(addsuffix .o, $(CPP_MAIN)))
 
 # List of all common objects needed to be linked into the final executable
 COMMON_OBJ = $(CPP_OBJ) $(CUDA_OBJ) $(CUDA_OBJ_FILES)
@@ -78,7 +79,7 @@ COMMON_OBJ = $(CPP_OBJ) $(CUDA_OBJ) $(CUDA_OBJ_FILES)
 # ------------------------------------------------------------------------------
 
 # Top level rules
-all: dense-neuralnet conv-neuralnet
+all: dense-neuralnet conv-neuralnet vggnet
 
 dense-neuralnet: $(DENSE_OBJ) $(COMMON_OBJ)
 	$(GPP) $(FLAGS) -o $(BINDIR)/$@ $(INCLUDE) $^ $(CUDA_LIBS) 
@@ -86,13 +87,19 @@ dense-neuralnet: $(DENSE_OBJ) $(COMMON_OBJ)
 conv-neuralnet: $(CONV_OBJ) $(COMMON_OBJ)
 	$(GPP) $(FLAGS) -o $(BINDIR)/$@ $(INCLUDE) $^ $(CUDA_LIBS)
 
+vggnet: $(VGG_OBJ) $(COMMON_OBJ)
+	$(GPP) $(FLAGS) -o $(BINDIR)/$@ $(INCLUDE) $^ $(CUDA_LIBS)
+
 
 # Compile C++ Source Files
 $(DENSE_OBJ): $(addprefix $(SRCDIR)/, $(CPP_MAIN))
-	$(GPP) $(FLAGS) -D CONV=0 -c -o $@ $(INCLUDE) $< 
+	$(GPP) $(FLAGS) -D CONV=0 -D VGG=0 -c -o $@ $(INCLUDE) $< 
 
 $(CONV_OBJ): $(addprefix $(SRCDIR)/, $(CPP_MAIN))
-	$(GPP) $(FLAGS) -D CONV=1 -c -o $@ $(INCLUDE) $< 
+	$(GPP) $(FLAGS) -D CONV=1 -D VGG=0 -c -o $@ $(INCLUDE) $<
+
+$(VGG_OBJ): $(addprefix $(SRCDIR)/, $(CPP_MAIN))
+	$(GPP) $(FLAGS) -D CONV=0 -D VGG=1 -c -o $@ $(INCLUDE) $< 
 
 $(CPP_OBJ): $(OBJDIR)/%.o : $(SRCDIR)/%
 	$(GPP) $(FLAGS) -c -o $@ $(INCLUDE) $<
@@ -113,4 +120,3 @@ clean:
 
 
 .PHONY: clean all
-

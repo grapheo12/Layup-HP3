@@ -53,9 +53,21 @@ public:
     virtual size_t get_workspace_size() const;
     void set_workspace(float *workspace, size_t workspace_size);
 
+
+    /* Layup Addon */
+    float threshold;
+
+    void freeUnnecessary();
+    int input_size, output_size, is_ckpt = 0;
+    void allocateOutput();
+    void transferOutputToHost(cudaStream_t transfer_stream);
+    void freeOutputMem();
+    void allocate_grad_out_batch();
+    float *h_out_batchPinned = NULL;
+
 protected:
     /** Previous layer. */
-    Layer *prev;
+    Layer *prev = NULL;
 
     /**
      * Tensor descriptor for the input minibatch {\link Layer::in_batch} and
@@ -203,7 +215,7 @@ private:
 class Conv2D : public Layer
 {
 public:
-    Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride,
+    Conv2D(Layer *prev, int n_kernels, int kernel_size, int stride, int padding,
         cublasHandle_t cublasHandle, cudnnHandle_t cudnnHandle);
     ~Conv2D();
     size_t get_workspace_size() const override;

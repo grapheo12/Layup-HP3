@@ -14,6 +14,7 @@
 
 // CUDA block width
 #define BW 1024
+#define EPSILON 1e-6
 
 /**
  * Sets all entries in a device buffer of floats equal to a specified value.
@@ -110,14 +111,25 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
 
 	int tid = blockDim.x*blockIdx.x + threadIdx.x;
     const int local_tid = threadIdx.x;
+    /*if(tid == 0)
+    {
+        printf("Printing.\n");
+        for(int i=0; i<100; i++)
+            printf("%f ", pred_Y[i]);
+        printf("\n");
+        for(int i=0; i<100; i++)
+            printf("%f ", true_Y[i]);
+        printf("\n");
+    }*/
 
     shmem[local_tid] = 0.0;
     while (tid < (n*c*h*w) )
 	{
+        if(pred_Y[tid] == 0)
+            pred_Y[tid] = EPSILON;
         shmem[local_tid] -= log(pred_Y[tid]) * true_Y[tid];
         tid += gridDim.x*blockDim.x; // Only necessary when the number of blocks > 65535
     }
-
     __syncthreads();
 
     for (int s = blockDim.x/2; s > 0; s /= 2)
@@ -131,7 +143,10 @@ __global__ void CrossEntropyKernel(float* pred_Y, float* true_Y, float *loss,
 
     // atomically add the accumulated loss per block into the global accumulator
     if (threadIdx.x == 0)
+    {
+        // printf("Atomic add  : %f\n", shmem[0]);
         atomicAdd(loss, shmem[0] / static_cast<float>(n));
+    }
 }
 
 /**
