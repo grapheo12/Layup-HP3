@@ -21,6 +21,7 @@
 #include "helper_cuda.h"
 
 #define ABS(x) (((x) >= 0) ? (x) : -(x))
+#define PRINT_TIME 1
 
 /**
  * Initializes a neural network that does a forwards and backwards pass on
@@ -229,15 +230,33 @@ void Model::train(const float *train_X, float *train_Y, float lr, int n_examples
 
         float acc = 0;
         float loss = 0;
-
+        float time_taken = 0;
         // Train on every complete batch
         for (long curr_batch = 0; curr_batch < n_batches; curr_batch++)
         {
+            #if PRINT_TIME
+                cudaEvent_t seq_start, seq_end;
+                cudaEventCreate(&seq_start);
+                cudaEventCreate(&seq_end);
+                CUDA_CALL(cudaEventRecord(seq_start,0));
+            #endif
+
             const float *curr_batch_X = train_X + curr_batch * in_size;
             float *curr_batch_Y = train_Y + curr_batch * out_size;
             // train_on_batch(curr_batch_X, curr_batch_Y, lr); // Commmenting this -- original behvaviour. This will break due to freeing of memory.
             train_on_batch_forward(curr_batch_X, curr_batch_Y, lr); 
             train_on_batch_backward(curr_batch_X, curr_batch_Y, lr, &acc, &loss); 
+            
+            #if PRINT_TIME
+                cudaDeviceSynchronize();
+                cudaEventRecord(seq_end,0);
+                cudaEventSynchronize(seq_end);
+                float time_for_one_iter = 0.0;
+                cudaEventElapsedTime(&time_for_one_iter, seq_start, seq_end);
+                time_taken += time_for_one_iter;
+                if(curr_batch % 10 == 0)
+                    printf("Average time for one iteration: %f\n", time_taken/(curr_batch+1));
+            #endif
         }
 
         std::cout << "Loss: " << loss / n_batches;
@@ -369,69 +388,69 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
 
     double constfact = 9300 / 732.0;
 
-    for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++){
-      auto out_shape = (*it)->get_out_shape();
-      cudnnDataType_t dtype;
+    for (it = this->layers->begin(); it != this->layers->end(); ++it, layer_num++)
+    {
+        auto out_shape = (*it)->get_out_shape();
+        cudnnDataType_t dtype;
         int n, c, h, w, n_stride, c_stride, h_stride, w_stride;
         CUDNN_CALL(cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
-            &n_stride, &c_stride, &h_stride, &w_stride));
+                &n_stride, &c_stride, &h_stride, &w_stride));
 
-      float *t_output;
+        float *t_output;
 
-      CUDA_CALL(cudaEventRecord(seq_start,0));
-      CUDA_CALL(cudaMalloc((float**)&t_output,n*c*h*w*sizeof(float)));	
-      (*it)->forward_pass();
-       cudaDeviceSynchronize();
-       cudaEventRecord(seq_end,0);	
-       cudaEventSynchronize(seq_end);
-      float time_taken_compute = 0.0;
-      cudaEventElapsedTime(&time_taken_compute, seq_start, seq_end);
-      CUDA_CALL(cudaFree(t_output));
-      cumulative += time_taken_compute;
-      std:: cout << std::setprecision(15) << std::fixed << std::endl;
-      std::cout << "Layer Number : " << layer_num << std::endl;
-      std:: cout << "Time Taken compute = " << time_taken_compute << std:: endl;
-      std:: cout << "Time Taken compute cumulative = " << cumulative << std:: endl;
+        CUDA_CALL(cudaEventRecord(seq_start,0));
+        CUDA_CALL(cudaMalloc((float**)&t_output,n*c*h*w*sizeof(float)));	
+        (*it)->forward_pass();
+        cudaDeviceSynchronize();
+        cudaEventRecord(seq_end,0);	
+        cudaEventSynchronize(seq_end);
+        float time_taken_compute = 0.0;
+        cudaEventElapsedTime(&time_taken_compute, seq_start, seq_end);
+        CUDA_CALL(cudaFree(t_output));
+        cumulative += time_taken_compute;
+        std:: cout << std::setprecision(15) << std::fixed << std::endl;
+        std::cout << "Layer Number : " << layer_num << std::endl;
+        std:: cout << "Time Taken compute = " << time_taken_compute << std:: endl;
+        std:: cout << "Time Taken compute cumulative = " << cumulative << std:: endl;
 
-      float *current_output = (*it)->get_output_fwd();
-      float *temp_output = (float *)malloc(n*c*h*w*sizeof(float));
+        float *current_output = (*it)->get_output_fwd();
+        float *temp_output = (float *)malloc(n*c*h*w*sizeof(float));
       
-      (*it)->output_size = n*c*h*w; // Storing output size
-      if((*it)->get_prev())
-      {
-        (*it)->input_size = (*it)->get_prev()->output_size;
-        printf("Input Size : %d\n", (*it)->input_size);
-      }
-      printf("Ouput Size : %d\n", (*it)->output_size);
+        (*it)->output_size = n*c*h*w; // Storing output size
+        if((*it)->get_prev())
+        {
+            (*it)->input_size = (*it)->get_prev()->output_size;
+            printf("Input Size : %d\n", (*it)->input_size);
+        }
+        printf("Ouput Size : %d\n", (*it)->output_size);
       
-      cudaEventRecord(tran_start,0);
-      CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
+        cudaEventRecord(tran_start,0);
+        CUDA_CALL( cudaMemcpyAsync(temp_output, current_output,
         n*c*h*w*sizeof(float), cudaMemcpyDeviceToHost, 0));
-      cudaDeviceSynchronize();
+        cudaDeviceSynchronize();
 
-      cudaEventRecord(tran_end,0);	
-       cudaEventSynchronize(tran_end);
-       float time_taken_transfer = 0.0;
-      cudaEventElapsedTime(&time_taken_transfer, tran_start, tran_end);
+        cudaEventRecord(tran_end,0);	
+        cudaEventSynchronize(tran_end);
+        float time_taken_transfer = 0.0;
+        cudaEventElapsedTime(&time_taken_transfer, tran_start, tran_end);
 
-      std::cout << "Layer Number : " << layer_num << std::endl;
-      std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
+        std::cout << "Layer Number : " << layer_num << std::endl;
+        std:: cout << "Time Taken transfer = " << time_taken_transfer << std:: endl;
 
-      float thresh = time_taken_transfer/time_taken_compute;
-      float thresh_cumulative = time_taken_transfer/cumulative;
-      std:: cout << "Thresh = " << thresh << "\n";
-      std:: cout << "Cumulative Thresh = " << thresh_cumulative << "\n";
-      free(temp_output);
-      if(thresh_cumulative < 1.0 || layer_num==0)
-      {
-        (this)->checkpoints.push_back(layer_num);
-        this->ckpt_pointers.push_back((*it));
-        // (this)->cpu_memory.push_back(temp_output);
-        cumulative = 0.0;
-        (*it)->is_ckpt = 1;
-        std::cout<<"CHECKPOINT AT LAYER "<<layer_num<<std::endl;
-      }
-      
+        float thresh = time_taken_transfer/time_taken_compute;
+        float thresh_cumulative = time_taken_transfer/cumulative;
+        std:: cout << "Thresh = " << thresh << "\n";
+        std:: cout << "Cumulative Thresh = " << thresh_cumulative << "\n";
+        free(temp_output);
+        if(thresh_cumulative < 1.0 || layer_num==0)
+        {
+            (this)->checkpoints.push_back(layer_num);
+            this->ckpt_pointers.push_back((*it));
+            // (this)->cpu_memory.push_back(temp_output);
+            cumulative = 0.0;
+            (*it)->is_ckpt = 1;
+            std::cout<<"CHECKPOINT AT LAYER "<<layer_num<<std::endl;
+        }
     }
 }
 
