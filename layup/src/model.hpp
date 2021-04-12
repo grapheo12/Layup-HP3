@@ -33,7 +33,7 @@ public:
     void init_workspace();
 
     void train(const float *train_X, float *train_Y, float lr,
-        int num_examples, int n_epochs);
+        int num_examples, int n_epochs, int pre_allocate_gpu);
     
     void profile(const float *train_X, float *train_Y, float lr,
         int num_examples, int n_epochs);

@@ -15,6 +15,7 @@ int main(int argc, char **argv)
 {
     // Kind of activation to use (default relu)
     std::string activation = "relu";
+    int pre_allocate_gpu = 0;
 
     // Directory in which training and testing data are stored (default is this)
     std::string dirname = "../../data";
@@ -34,6 +35,11 @@ int main(int argc, char **argv)
             i++;
             if (i < argc)
                 activation = argv[i];
+        }
+
+        else if (strcmp(argv[i], "--pre_allocate_gpu") == 0 || strcmp(argv[i], "-pag") == 0)
+        {
+            pre_allocate_gpu = 1;
         }
     }
 
@@ -122,9 +128,13 @@ int main(int argc, char **argv)
     std::cout << "Predicting on " << n_classes << " classes." << std::endl;
     model->profile(train_X, train_Y, 0.03f, n_train, 25);
     // return 0;
-    model->cudaFreeUnnecessary();
+    if(!pre_allocate_gpu)
+    {
+        printf("Freeing all the memory.\n");
+        model->cudaFreeUnnecessary();
+    }
     model->init_workspace();
-    model->train(train_X, train_Y, 0.03f, n_train, 25);
+    model->train(train_X, train_Y, 0.03f, n_train, 25, pre_allocate_gpu);
 
     // Load test set
     int n_test;

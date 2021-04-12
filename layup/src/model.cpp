@@ -216,7 +216,7 @@ void Model::profile(const float *train_X, float *train_Y, float lr, int n_exampl
       std:: cout << "Exiting Profiler" << std:: endl;
 }
 void Model::train(const float *train_X, float *train_Y, float lr, int n_examples,
-    int n_epochs)
+    int n_epochs, int pre_allocate_gpu)
 {
     int in_size = get_output_batch_size(layers->front());
     int out_size = get_output_batch_size(layers->back());
@@ -243,9 +243,15 @@ void Model::train(const float *train_X, float *train_Y, float lr, int n_examples
 
             const float *curr_batch_X = train_X + curr_batch * in_size;
             float *curr_batch_Y = train_Y + curr_batch * out_size;
-            // train_on_batch(curr_batch_X, curr_batch_Y, lr); // Commmenting this -- original behvaviour. This will break due to freeing of memory.
-            train_on_batch_forward(curr_batch_X, curr_batch_Y, lr); 
-            train_on_batch_backward(curr_batch_X, curr_batch_Y, lr, &acc, &loss); 
+            if(pre_allocate_gpu)
+            {
+                train_on_batch(curr_batch_X, curr_batch_Y, lr); //original behvaviour.
+            }
+            else
+            {
+                train_on_batch_forward(curr_batch_X, curr_batch_Y, lr); 
+                train_on_batch_backward(curr_batch_X, curr_batch_Y, lr, &acc, &loss); 
+            }
             
             #if PRINT_TIME
                 cudaDeviceSynchronize();
