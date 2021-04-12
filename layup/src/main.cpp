@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 {
     // Kind of activation to use (default relu)
     std::string activation = "relu";
-    int pre_allocate_gpu = 0;
+    int pre_allocate_gpu = 0, transfer_every_layer = 0;
 
     // Directory in which training and testing data are stored (default is this)
     std::string dirname = "../../data";
@@ -41,6 +41,18 @@ int main(int argc, char **argv)
         {
             pre_allocate_gpu = 1;
         }
+
+        else if (strcmp(argv[i], "--transfer_every_layer") == 0 || strcmp(argv[i], "-tel") == 0)
+        {
+            transfer_every_layer = 1;
+        }
+
+    }
+
+    if(transfer_every_layer && pre_allocate_gpu)
+    {
+        printf("Both flags are turned on -- (transfer_every_layer, pre_allocate_gpu). Please select one.\n");
+        exit(0);
     }
 
     // Load training set
@@ -126,7 +138,7 @@ int main(int argc, char **argv)
 
     // Train the model on the training set for 25 epochs
     std::cout << "Predicting on " << n_classes << " classes." << std::endl;
-    model->profile(train_X, train_Y, 0.03f, n_train, 25);
+    model->profile(train_X, train_Y, 0.03f, n_train, 25, transfer_every_layer);
     // return 0;
     if(!pre_allocate_gpu)
     {

@@ -192,7 +192,7 @@ void Model::init_workspace()
  *                   gradient updates from the entire dataset train_X
  */
 void Model::profile(const float *train_X, float *train_Y, float lr, int n_examples,
-    int n_epochs)
+    int n_epochs, int transfer_every_layer)
 {
     int in_size = get_output_batch_size(layers->front());
     int out_size = get_output_batch_size(layers->back());
@@ -208,7 +208,7 @@ void Model::profile(const float *train_X, float *train_Y, float lr, int n_exampl
         {
             const float *curr_batch_X = train_X + curr_batch * in_size;
             float *curr_batch_Y = train_Y + curr_batch * out_size;
-            profile_on_batch(curr_batch_X, curr_batch_Y, lr);
+            profile_on_batch(curr_batch_X, curr_batch_Y, lr, transfer_every_layer);
 			//printf("Okay Stop after callin train on batch\n");
 	   		//exit(0);	
         }
@@ -364,7 +364,7 @@ result *Model::evaluate(const float *eval_X, float *eval_Y, int n_examples)
  * @param lr The learning rate (coefficient by which we multiply the gradient
  *           when adding it to the current parameter values)
  */
-void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
+void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr, int transfer_every_layer)
 {
     assert(this->has_loss && "Cannot train without a loss function.");
 
@@ -448,7 +448,19 @@ void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr)
         std:: cout << "Thresh = " << thresh << "\n";
         std:: cout << "Cumulative Thresh = " << thresh_cumulative << "\n";
         free(temp_output);
-        if(thresh_cumulative < 1.0 || layer_num==0)
+        if(!transfer_every_layer)
+        {
+            if(thresh_cumulative < 1.0 || layer_num==0)
+            {
+                (this)->checkpoints.push_back(layer_num);
+                this->ckpt_pointers.push_back((*it));
+                // (this)->cpu_memory.push_back(temp_output);
+                cumulative = 0.0;
+                (*it)->is_ckpt = 1;
+                std::cout<<"CHECKPOINT AT LAYER "<<layer_num<<std::endl;
+            }
+        }
+        else // Transfer every layer flag is on
         {
             (this)->checkpoints.push_back(layer_num);
             this->ckpt_pointers.push_back((*it));

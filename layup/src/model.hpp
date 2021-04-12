@@ -36,7 +36,7 @@ public:
         int num_examples, int n_epochs, int pre_allocate_gpu);
     
     void profile(const float *train_X, float *train_Y, float lr,
-        int num_examples, int n_epochs);
+        int num_examples, int n_epochs, int transfer_every_layer);
 
     float *predict(const float *pred_X, int num_examples);
     result *evaluate(const float *eval_X, float *eval_Y, int num_examples);
@@ -49,7 +49,7 @@ public:
     std::vector<float*> cpu_memory;
     void cudaFreeUnnecessary();
 private:
-    void profile_on_batch(const float *batch_X, float *batch_Y, float lr);
+    void profile_on_batch(const float *batch_X, float *batch_Y, float lr, int transfer_every_layer);
     void train_on_batch(const float *batch_X, float *batch_Y, float lr);
     void train_on_batch_forward(const float *batch_X, float *batch_Y, float lr);
     void train_on_batch_backward(const float *batch_X, float *batch_Y, float lr, float *acc, float *loss);
