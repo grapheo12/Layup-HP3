@@ -1,9 +1,4 @@
-/**
- * Layer-agnostic implementation of a neural network Model's core functionality
- * @author Aadyot Bhatnagar
- * @date April 22, 2018
- */
-
+// the main code where we implement algorithm 1(profile_on_batch) and algorithm 2(train_on_batch_forward and train_on_batch_backward)
 #include <string>
 #include <cassert>
 #include <iostream>
@@ -23,13 +18,7 @@
 #define ABS(x) (((x) >= 0) ? (x) : -(x))
 #define PRINT_TIME 1
 
-/**
- * Initializes a neural network that does a forwards and backwards pass on
- * minibatches of data. In each minibatch, there are n data points, each with
- * c channels, height h, and width w. For one-dimensional input data, set height
- * and width to 1, and let the number of channels c represent the dimensionality
- * of the input vectors.
- */
+
 Model::Model(int n, int c, int h, int w) {
     this->has_loss = false;
     this->batch_size = n;
@@ -60,16 +49,7 @@ Model::~Model() {
     CUDNN_CALL( cudnnDestroy(cudnnHandle) );
 }
 
-/**
- * To add a layer to a model, one must specify the type of layer as a string, as
- * well as the arguments needed to instantiate such a layer. The arguments arg1,
- * arg2, and arg3 specify the parameters used in the constructor of the layer we
- * wish to initialize. They have default values of 0, and a user need only supply
- * the arguments necessary taken by the constructor for the desired layer.
- *
- * @param layer A name for the kind of layer we want to add to the model.
- * @param shape Parameters used to initialize the layer in question.
- */
+
 void Model::add(std::string layer, std::vector<int> shape)
 {
     assert(!this->has_loss && "Cannot add any layers after a loss function.");
@@ -151,11 +131,7 @@ void Model::add(std::string layer, std::vector<int> shape)
     else assert(false && "Invalid layer specification.");
 }
 
-/**
- * Sets up any cuDNN workspace to be used by this model.
- *
- * @pre The layers of this model have all been added
- */
+
 void Model::init_workspace()
 {
     assert(this->has_loss && "All layers of model must have been added!");
@@ -165,8 +141,6 @@ void Model::init_workspace()
     for (it = layers->begin(); it != layers->end(); ++it)
         workspace_size = std::max(workspace_size, (*it)->get_workspace_size());
 
-    // If any need a nonzero-sized workspace, initialize one appropriately
-    // and give it to each layer individually
     if (workspace_size > 0)
     {
         CUDA_CALL( cudaMalloc(&workspace, workspace_size) );
@@ -175,22 +149,6 @@ void Model::init_workspace()
     }
 }
 
-/**
- * Trains the model on the training examples given at the specified learning
- * rate for the desired number of epochs.
- *
- * @param train_X The entire dataset that we wish to train our model on
- *
- * @param train_Y The ground truth labels assigned to each entry in train_X
- *
- * @param lr The learning rate (the coefficient to multipy the gradient by when
- *             doing gradient descent)
- *
- * @param n_examples The number of training examples contained in train_X
- *
- * @param n_epochs The number of iterations over which we want to accumulate
- *                   gradient updates from the entire dataset train_X
- */
 void Model::profile(const float *train_X, float *train_Y, float lr, int n_examples,
     int n_epochs, int transfer_every_layer)
 {
@@ -272,16 +230,6 @@ void Model::train(const float *train_X, float *train_Y, float lr, int n_examples
 }
 
 
-/**
- * Has a trained model return its predictions on a set of data.
- *
- * @param pred_X A set of data points that we want our model to make
- *                 predictions on
- *
- * @param n_examples The number of data points in pred_X
- *
- * @return An array of the model's predictions on each data point in pred_X
- */
 float *Model::predict(const float *pred_X, int n_examples)
 {
     // variables in which to get input and output shape
@@ -303,19 +251,6 @@ float *Model::predict(const float *pred_X, int n_examples)
 }
 
 
-/**
- * Returns the model's predictive performance on a set of inputs, given their
- * ground truth labels.
- *
- * @param eval_X A set of data points we want to evaluate a trained model's
- *               predictive performance
- *
- * @param eval_Y The ground truth labels for each data point in eval_X
- *
- * @param n_examples The number of data points in eval_X
- *
- * @return The model's average predictive performance on data (eval_X, eval_Y)
- */
 result *Model::evaluate(const float *eval_X, float *eval_Y, int n_examples)
 {
     int in_size = get_output_batch_size(layers->front());
@@ -351,19 +286,7 @@ result *Model::evaluate(const float *eval_X, float *eval_Y, int n_examples)
 
 
 
-/**
- * Does one stochastic gradient update on the model using a minibatch of input
- * data batch_X with corresponding ground truth labels batch_Y.
- *
- * @param batch_X The starting point of the minibatch of data we wish to use to
- *                  perform the next stochastic gradient descent update
- *
- * @param batch_Y The starting point of the minibatch of ground truth labels
- *                  associated with batch_X
- *
- * @param lr The learning rate (coefficient by which we multiply the gradient
- *           when adding it to the current parameter values)
- */
+
 void Model::profile_on_batch(const float *batch_X, float *batch_Y, float lr, int transfer_every_layer)
 {
     assert(this->has_loss && "Cannot train without a loss function.");
@@ -658,15 +581,7 @@ void Model::train_on_batch_backward(const float *batch_X, float *batch_Y, float 
 }
 
 
-/**
- * Returns the model's predictions on a minibatch of input data starting at
- * batch_X.
- *
- * @param batch_X A minibatch of input data we want our model to make
- *                  predictions on
- *
- * @return The model's predictions on batch_X
- */
+
 float *Model::predict_on_batch(const float *batch_X) {
 
     // Copy input (batch_X) into input layer and nothing into output layer
@@ -682,19 +597,6 @@ float *Model::predict_on_batch(const float *batch_X) {
 }
 
 
-/**
- * Evalutes the model's predictions on an input minibatch batch_X with
- * true outputs batch_Y.
- *
- * @param batch_X A minibatch of data we want to use to evaluate our trained
- *                  model's performance
- *
- * @param batch_Y The starting point of the minibatch of ground truth labels
- *                  associated with batch_X
- *
- * @return The model's average predictive performance on data minibatch
- *           (batch_X, batch_Y)
- */
 result *Model::evaluate_on_batch(const float *batch_X, float *batch_Y) {
     assert(this->has_loss && "Cannot evaluate without a loss function.");
 
@@ -702,22 +604,13 @@ result *Model::evaluate_on_batch(const float *batch_X, float *batch_Y) {
     result *ret = new result;
     ret->predictions = predict_on_batch(batch_X);
 
-    // Copy the output batch to the loss layer so we can evaluate our
-    // predictions (since we've already done a forward pass)
     copy_output_batch(batch_Y);
     ret->acc = this->layers->back()->get_accuracy();
     ret->loss = this->layers->back()->get_loss();
     return ret;
 }
 
-/**
- * Copies a minibatch of inputs on the host to the device buffer corresponding
- * to the outputs of the input layer.
- *
- * @param batch_X    A pointer to the start of the host buffer containing the
- *                    minibatch of inputs we wish to copy. The size (in bytes) of
- *                    the minibatch is inferred from the input layer.
- */
+
 void Model::copy_input_batch(const float *batch_X)
 {
     Layer *input = layers->front();
@@ -726,14 +619,7 @@ void Model::copy_input_batch(const float *batch_X)
         in_size * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-/**
- * Copies a minibatch of outputs on the host to the device buffer corresponding
- * to the gradient with respect to the output of the loss layer.
- *
- * @param batch_Y    A pointer to the start of the host buffer containing the
- *                    minibatch of outputs we wish to copy. The size (in bytes) of
- *                    the minibatch is inferred from the loss layer.
- */
+
 void Model::copy_output_batch(const float *batch_Y)
 {
     Layer *loss = layers->back();
@@ -742,20 +628,12 @@ void Model::copy_output_batch(const float *batch_Y)
         out_size * sizeof(float), cudaMemcpyHostToDevice) );
 }
 
-/**
- * Returns the number of floats in an output minibatch of the given layer.
- *
- * @param layer    The layer whose output size we wish to find
- *
- * @return The size (in number of floats) of the output of {@code layer}
- */
+
 int Model::get_output_batch_size(Layer *layer) const
 {
-    // variables in which to get output shape
     cudnnDataType_t dtype;
     int n, c, h, w, nStride, cStride, hStride, wStride;
 
-    // Figure out size of output minibatch
     cudnnTensorDescriptor_t out_shape = layer->get_out_shape();
     CUDNN_CALL( cudnnGetTensor4dDescriptor(out_shape, &dtype, &n, &c, &h, &w,
         &nStride, &cStride, &hStride, &wStride) );

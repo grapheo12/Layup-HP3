@@ -1,9 +1,4 @@
-/**
- * Builds and trains a neural network on the MNIST dataset of handwritten digits
- * @author Aadyot Bhatnagar
- * @date April 22, 2018
- */
-
+// main.cpp where our model is defined and it calls rest of the functions
 #include <string>
 #include <cstring>
 #include <iostream>
@@ -13,7 +8,6 @@
 #define CONV 1
 int main(int argc, char **argv)
 {
-    // Kind of activation to use (default relu)
     std::string activation = "relu";
     int pre_allocate_gpu = 0, transfer_every_layer = 0;
 
