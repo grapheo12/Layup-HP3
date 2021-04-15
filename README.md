@@ -24,7 +24,6 @@ Ensure the following directory structure:
     ├── tags       
 ├── stats/
 ├── README.md
-└── pubspec.yaml
 ```
 
 ## Compilation 
