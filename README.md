@@ -26,3 +26,29 @@ Ensure the following directory structure:
 ├── README.md
 └── pubspec.yaml
 ```
+
+## Compilation 
+
+```
+cd layup
+make
+```
+
+## Running Instructions
+
+### To run the VGG Model : 
+```
+bin/vggnet --dir ./../data -b 20
+```
+
+### To run a simple Conv-Net : 
+```
+bin/conv-neuralnet --dir ./../data -b 20
+```
+
+To run any of the baseline add the following flag : 
+```
+--pag   # To preallocate GPU Memory.
+--tel   # To transfer every layer to CPU.
+```
+Note :  To remove the logging/printing of average iteration time, please set the flag to 0 in the following line https://github.com/ShahRutav/Layup-HP3/blob/db3290722479105069d2ba652194e8b4ecd71057/layup/src/model.cpp#L19
